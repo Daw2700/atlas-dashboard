@@ -1,0 +1,1003 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="3600">
+<title>ATLAS — live paper-trading research record</title>
+<style>
+  /* Dark-committed trading-journal look: navy-biased neutrals, one blue
+     accent, green/red reserved for P&L sign (always beside a label). */
+  :root {
+    color-scheme: dark;
+    --page:      #0b0d12;
+    --surface:   #12151d;
+    --surface-2: #171b26;
+    --ink:       #f2f4f8;
+    --ink-2:     #b9c0cf;
+    --muted:     #7e8697;
+    --grid:      #222839;
+    --baseline:  #2e3547;
+    --border:    rgba(160,180,230,0.10);
+    --blue:      #3987e5;
+    --blue-dim:  rgba(57,135,229,0.16);
+    --good:      #0ca30c;
+    --loss:      #e66767;
+    --warning:   #fab219;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--page); color: var(--ink);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; text-decoration: none; }
+
+  /* chrome */
+  .topbar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; background: rgba(11,13,18,0.92);
+    border-bottom: 1px solid var(--border); backdrop-filter: blur(6px);
+  }
+  .brand { font-weight: 800; letter-spacing: .14em; font-size: 1.05rem; }
+  .brand b { color: var(--blue); }
+  .topbar .sub { color: var(--muted); font-size: .78rem; }
+  .topbar .upd { margin-left: auto; color: var(--muted); font-size: .75rem;
+                 text-align: right; }
+  .app { max-width: 1180px; margin: 0 auto; }
+  nav.side { display: none; }
+  .navchips { display: flex; gap: 8px; overflow-x: auto; padding: 10px 16px;
+              scrollbar-width: none; }
+  .navchips::-webkit-scrollbar { display: none; }
+  .navchips a { flex: 0 0 auto; display: inline-flex; align-items: center;
+    gap: 7px; font-size: .8rem; color: var(--ink-2); padding: 6px 12px;
+    border: 1px solid var(--border); border-radius: 999px;
+    background: var(--surface); }
+  .navchips a.on { background: var(--blue-dim); color: var(--blue);
+                   border-color: var(--blue); }
+  main { padding: 4px 16px 60px; min-width: 0; }
+  @media (min-width: 980px) {
+    .app { display: grid; grid-template-columns: 208px minmax(0, 1fr);
+           gap: 0 24px; padding: 0 16px; }
+    .navchips { display: none; }
+    nav.side { display: block; padding: 24px 0; }
+    nav.side .inner { position: sticky; top: 68px; display: flex;
+                      flex-direction: column; gap: 2px; }
+    nav.side a { display: flex; align-items: center; gap: 9px;
+                 padding: 9px 12px; border-radius: 8px; color: var(--ink-2);
+                 font-size: .88rem; border-left: 2px solid transparent; }
+    nav.side a:hover { background: var(--surface); color: var(--ink); }
+    nav.side a.on { background: var(--surface); color: var(--ink);
+                    border-left-color: var(--blue); }
+    nav.side .modechip { margin-top: 14px; }
+    main { padding: 24px 0 80px; }
+  }
+  .st { width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+        flex: 0 0 auto; }
+  .st.live { background: var(--good); }
+  .st.warn { background: var(--warning); }
+  .st.abstain { background: var(--muted); }
+  .st.pending { background: none; border: 1px dashed var(--muted); }
+  .st.overview { background: var(--blue); }
+  .modechip { display: inline-block; margin: 10px 0 0; font-size: .68rem;
+    font-weight: 700; letter-spacing: .08em; color: var(--warning);
+    border: 1px solid var(--warning); border-radius: 6px; padding: 4px 8px; }
+
+  section { margin-top: 26px; }
+  h2 { font-size: .78rem; text-transform: uppercase; letter-spacing: .12em;
+       color: var(--muted); margin-bottom: 10px; font-weight: 650; }
+  .card { background: var(--surface); border: 1px solid var(--border);
+          border-radius: 14px; padding: 16px; min-width: 0; }
+  .welcome h1 { font-size: 1.25rem; }
+  .welcome h1 span { color: var(--blue); }
+  .welcome .note { color: var(--muted); font-size: .82rem; margin-top: 2px; }
+
+  /* tiles */
+  .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+           margin-top: 14px; }
+  @media (min-width: 720px) { .tiles { grid-template-columns: repeat(4, 1fr); } }
+  .tile { background: var(--surface); border: 1px solid var(--border);
+          border-radius: 14px; padding: 14px; min-width: 0; }
+  .tile .k { color: var(--muted); font-size: .72rem; text-transform: uppercase;
+             letter-spacing: .08em; }
+  .tile .v { font-size: 1.5rem; font-weight: 750; margin-top: 2px;
+             font-variant-numeric: tabular-nums; }
+  .tile .n { color: var(--ink-2); font-size: .76rem; margin-top: 3px; }
+  .tile .v.pos { color: var(--good); }
+  .tile .v.neg { color: var(--loss); }
+  .gauge { display: flex; align-items: center; gap: 12px; }
+  .gauge svg { flex: 0 0 auto; }
+  .gauge .big { font-size: 1.35rem; font-weight: 750;
+                font-variant-numeric: tabular-nums; }
+  .splitbar { height: 10px; border-radius: 5px; overflow: hidden;
+              display: flex; margin-top: 8px; background: var(--baseline); }
+  .splitbar i { display: block; height: 100%; }
+  .lg { display: flex; gap: 12px; margin-top: 6px; font-size: .74rem;
+        color: var(--ink-2); flex-wrap: wrap; }
+  .lg .dot { display: inline-block; width: 8px; height: 8px;
+             border-radius: 2px; margin-right: 5px; }
+  .streakrow { display: flex; gap: 16px; margin-top: 4px; }
+  .streakrow .s .num { font-size: 1.5rem; font-weight: 750; }
+  .streakrow .s .lab { color: var(--muted); font-size: .72rem; }
+  .pillpair { display: flex; gap: 4px; margin-top: 6px; }
+  .pill { font-size: .7rem; font-weight: 700; border-radius: 5px;
+          padding: 2px 7px; font-variant-numeric: tabular-nums; }
+  .pill.w { background: var(--blue-dim); color: var(--blue); }
+  .pill.l { background: rgba(230,103,103,0.14); color: var(--loss); }
+
+  /* balance + side card */
+  .duo { display: grid; gap: 10px; margin-top: 10px; }
+  @media (min-width: 980px) { .duo { grid-template-columns: 3fr 2fr; } }
+  .cardhead { display: flex; align-items: baseline; gap: 10px;
+              flex-wrap: wrap; margin-bottom: 8px; }
+  .cardhead .t { font-weight: 700; }
+  .cardhead .delta { font-size: .8rem; font-variant-numeric: tabular-nums; }
+  .delta.pos { color: var(--good); } .delta.neg { color: var(--loss); }
+  .tabs { margin-left: auto; display: flex; gap: 2px; }
+  .tabs button { background: none; border: 0; color: var(--muted);
+    font: 650 .72rem system-ui, sans-serif; padding: 4px 8px;
+    border-radius: 6px; cursor: pointer; }
+  .tabs button.on { background: var(--blue-dim); color: var(--blue); }
+  .chartbox svg { display: block; width: 100%; height: auto; }
+  .tt { position: fixed; pointer-events: none; background: var(--page);
+        border: 1px solid var(--border); border-radius: 8px;
+        padding: 6px 9px; font-size: .78rem; color: var(--ink-2);
+        display: none; z-index: 20; }
+  .tt b { color: var(--ink); }
+
+  /* calendar */
+  .calhead { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .calhead .m { font-weight: 700; min-width: 8.5em; text-align: center; }
+  .calhead button { background: var(--surface-2); color: var(--ink-2);
+    border: 1px solid var(--border); border-radius: 8px; width: 30px;
+    height: 30px; cursor: pointer; font-size: 1rem; }
+  .calhead button:disabled { opacity: .35; cursor: default; }
+  .calsum { margin-left: auto; display: flex; gap: 4px; flex-wrap: wrap; }
+  .caltable { width: 100%; min-width: 540px; border-collapse: separate;
+              border-spacing: 3px; margin-top: 10px; table-layout: fixed; }
+  .caltable th { color: var(--muted); font-size: .66rem; font-weight: 650;
+                 text-transform: uppercase; padding-bottom: 2px; }
+  .caltable td { background: var(--surface-2); border: 1px solid transparent;
+    border-radius: 8px; height: 52px; vertical-align: top; padding: 4px 5px;
+    font-size: .68rem; font-variant-numeric: tabular-nums; }
+  .caltable td.blank { background: none; }
+  .caltable td .d { color: var(--muted); font-size: .62rem; }
+  .caltable td .p { font-weight: 700; margin-top: 1px; }
+  .caltable td .c { color: var(--muted); }
+  .caltable td.win { border-color: rgba(12,163,12,0.35); }
+  .caltable td.win .p { color: var(--good); }
+  .caltable td.loss { border-color: rgba(230,103,103,0.4); }
+  .caltable td.loss .p { color: var(--loss); }
+  .caltable td.tot { background: none; border: 1px dashed var(--baseline); }
+  .caltable td.tot .p { font-weight: 700; }
+
+  /* journal + generic rows */
+  .pick { border-bottom: 1px solid var(--grid); padding: 11px 0; }
+  .pick:last-child { border-bottom: 0; }
+  .pick .q { font-size: .92rem; line-height: 1.35; }
+  .pick .meta { display: flex; flex-wrap: wrap; gap: 5px 14px; margin-top: 6px;
+                font-size: .79rem; color: var(--ink-2);
+                font-variant-numeric: tabular-nums; }
+  .pick .meta b { color: var(--ink); font-weight: 650; }
+  .pnl { font-weight: 750; } .pnl.pos { color: var(--good); }
+  .pnl.neg { color: var(--loss); }
+  .gate { margin-top: 6px; font-size: .79rem; }
+  .gate.blocked { color: var(--ink-2); }
+  .gate.fired { color: var(--good); font-weight: 650; }
+  details.rat { margin-top: 6px; }
+  details.rat summary { color: var(--blue); font-size: .78rem; cursor: pointer; }
+  details.rat p { color: var(--ink-2); font-size: .81rem; margin-top: 6px;
+                  overflow-wrap: anywhere; }
+  .dom-tag { font-size: .66rem; font-weight: 700; letter-spacing: .05em;
+             color: var(--muted); text-transform: uppercase; }
+
+  /* live strip, funnel, engines, holdout */
+  .strip { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  @media (min-width: 720px) { .strip { grid-template-columns: repeat(5, 1fr); } }
+  .stage { padding: 9px 0; border-bottom: 1px solid var(--grid); }
+  .stage:last-child { border-bottom: 0; }
+  .stage .row1 { display: flex; justify-content: space-between; gap: 10px;
+                 align-items: baseline; }
+  .stage .lbl { font-size: .9rem; color: var(--ink-2); }
+  .stage .cnt { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stage .bar { height: 9px; border-radius: 4px; margin-top: 6px;
+                background: var(--blue); min-width: 3px; }
+  .stage .died { color: var(--muted); font-size: .78rem; margin-top: 5px; }
+  .stage .died b { color: var(--ink-2); font-weight: 600; }
+  .domrow { display: flex; justify-content: space-between; gap: 8px;
+            font-size: .84rem; padding: 4px 0; color: var(--ink-2);
+            font-variant-numeric: tabular-nums; }
+  .domrow .d { min-width: 5.5em; color: var(--ink); }
+  .meter { height: 9px; background: var(--baseline); border-radius: 5px;
+           overflow: hidden; margin: 8px 0 4px; }
+  .meter .fill { height: 100%; background: var(--blue); min-width: 2px; }
+  .kv { display: flex; justify-content: space-between; padding: 6px 0;
+        border-bottom: 1px solid var(--grid); font-size: .88rem; gap: 10px; }
+  .kv:last-child { border-bottom: 0; }
+  .kv .k { color: var(--ink-2); }
+  .kv .v { font-variant-numeric: tabular-nums; text-align: right;
+           white-space: nowrap; }
+  .finePrint { color: var(--muted); font-size: .77rem; margin-top: 8px; }
+  .engine { padding: 10px 0; border-bottom: 1px solid var(--grid); }
+  .engine:last-child { border-bottom: 0; }
+  .engine .top { display: flex; align-items: center; gap: 8px; }
+  .engine .name { font-weight: 650; }
+  .engine .go { margin-left: auto; color: var(--blue); font-size: .78rem; }
+  .chip { font-size: .66rem; font-weight: 700; letter-spacing: .06em;
+          padding: 2px 8px; border-radius: 999px; border: 1px solid; }
+  .chip.live { color: var(--good); border-color: var(--good); }
+  .chip.warn { color: var(--warning); border-color: var(--warning); }
+  .chip.abstain { color: var(--ink-2); border-color: var(--baseline); }
+  .chip.pending { color: var(--muted); border-color: var(--baseline);
+                  border-style: dashed; }
+  .engine .note { color: var(--ink-2); font-size: .84rem; margin-top: 4px; }
+  .engine .live-n { color: var(--muted); font-size: .76rem; margin-top: 3px;
+                    font-variant-numeric: tabular-nums; }
+  .epanel-head { display: flex; align-items: center; gap: 10px;
+                 flex-wrap: wrap; }
+  .estat-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .estat { background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 10px; font-size: .78rem;
+    color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .estat b { color: var(--ink); }
+  .howto p { color: var(--ink-2); font-size: .9rem; }
+  .cl-entry { padding: 10px 0; border-bottom: 1px solid var(--grid); }
+  .cl-entry:last-child { border-bottom: 0; }
+  .cl-entry .t { font-weight: 650; font-size: .9rem; }
+  .cl-entry ul { margin: 6px 0 0 18px; color: var(--ink-2); font-size: .83rem; }
+  .cl-entry li { margin-top: 4px; }
+  details.tbl summary { color: var(--muted); font-size: .77rem;
+                        cursor: pointer; margin-top: 8px; }
+  details.tbl table { width: 100%; border-collapse: collapse; margin-top: 6px;
+                      font-size: .79rem; font-variant-numeric: tabular-nums; }
+  details.tbl td, details.tbl th { padding: 4px 6px; text-align: right;
+        border-bottom: 1px solid var(--grid); color: var(--ink-2); }
+  details.tbl th { color: var(--muted); font-weight: 600; }
+  details.tbl td:first-child, details.tbl th:first-child { text-align: left; }
+  footer { margin-top: 44px; color: var(--muted); font-size: .77rem; }
+  footer code { color: var(--ink-2); font-family: ui-monospace, monospace;
+                font-size: .72rem; }
+  .empty { color: var(--muted); font-size: .86rem; }
+  .stale { display: none; margin: 10px 0 0; padding: 8px 12px;
+    border-radius: 8px; background: var(--surface);
+    border: 1px solid var(--warning); color: var(--ink-2); font-size: .84rem; }
+  .stale.on { display: block; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="brand">ATLAS<b>&nbsp;·</b></span>
+  <span class="sub">paper-trading research record</span>
+  <span class="upd" id="updated"></span>
+</div>
+<div class="navchips" id="navchips"></div>
+<div class="app">
+  <nav class="side"><div class="inner" id="sidenav"></div></nav>
+  <main>
+  <div class="stale" id="stale"></div>
+
+  <section id="dashboard" data-view="all" style="margin-top:14px">
+    <div class="welcome">
+      <h1 id="view-title"></h1>
+      <div class="note" id="bt-label"></div>
+    </div>
+    <div class="card" id="bt-empty" hidden style="margin-top:14px"></div>
+    <div id="bt-body">
+      <div class="tiles" id="bt-tiles"></div>
+      <div class="duo">
+        <div class="card">
+          <div class="cardhead">
+            <span class="t">Balance</span>
+            <span class="delta" id="bal-delta"></span>
+            <span class="tabs" id="bal-tabs"></span>
+          </div>
+          <div class="chartbox" id="bal-chart"></div>
+          <details class="tbl"><summary>data table</summary>
+            <table id="bal-table"></table></details>
+        </div>
+        <div class="card">
+          <div class="cardhead">
+            <span class="t">Trades / month</span>
+            <span class="delta" id="tc-total"></span>
+          </div>
+          <div class="chartbox" id="tc-chart"></div>
+          <div class="finePrint" id="bt-assump"></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:10px" id="cal-card">
+        <div class="calhead">
+          <button id="cal-prev" aria-label="previous month">‹</button>
+          <span class="m" id="cal-month"></span>
+          <button id="cal-next" aria-label="next month">›</button>
+          <span class="calsum" id="cal-sum"></span>
+        </div>
+        <div style="overflow-x:auto"><table class="caltable" id="cal"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="engine-info" data-view="engines">
+    <h2>Live record — this engine</h2>
+    <div class="card" id="einfo"></div>
+  </section>
+
+  <section id="journal" data-view="all">
+    <h2 id="journal-title">Journal — resolved backtest picks</h2>
+    <div class="card" id="journal-list"></div>
+  </section>
+
+  <section id="live" data-view="overview">
+    <h2>Live forward record (started Jul 18, 2026)</h2>
+    <div class="strip" id="strip"></div>
+    <div class="card" style="margin-top:10px">
+      <div class="cardhead"><span class="t">Daily funnel — where candidates died</span></div>
+      <div class="finePrint" id="funnel-note" style="margin:0 0 10px"></div>
+      <div id="funnel"></div>
+      <div id="domains" style="margin-top:12px"></div>
+      <div class="finePrint">Zero fires is the system working: a bet fires
+      only when modeled edge is at least 2× modeled costs at a confidence the
+      engine has earned. The rules forbid loosening thresholds to force
+      action.</div>
+    </div>
+  </section>
+
+  <section id="scored-sec" data-view="all">
+    <h2 id="scored-title">Recently scored markets (live)</h2>
+    <div class="card" id="scored"></div>
+  </section>
+
+  <section id="holdout-sec" data-view="overview,crypto">
+    <h2>Crypto v0.3 — pre-registered holdout</h2>
+    <div class="card" id="holdout"></div>
+  </section>
+
+  <section id="engines-sec" data-view="overview">
+    <h2>Engine board</h2>
+    <div class="card" id="engines"></div>
+  </section>
+
+  <section class="howto" data-view="overview">
+    <h2>How to read this</h2>
+    <div class="card">
+      <p>Everything here is paper money: a hypothetical $5,000 account where
+      every pick risks 1% of current equity. The rules — what qualifies as a
+      bet, every threshold, every model version — were written down before
+      the results, and changes are logged publicly below. The backtest replay
+      is in-sample evidence rendered as it would have looked live; the
+      pre-registered holdout, not the replay, decides whether the model
+      survives. Most days the live system fires nothing, because most markets
+      don't offer an edge worth 2× the cost of trading them. The records are
+      append-only and no verdict is drawn before 100 resolved live picks.</p>
+    </div>
+  </section>
+
+  <section id="changelog-sec" data-view="overview">
+    <h2>Changelog — recent rule &amp; model changes</h2>
+    <div class="card" id="changelog"></div>
+  </section>
+
+  <footer>
+    <div>Every number on this page is derived from append-only files on
+    disk: <span id="srcs"></span></div>
+    <div style="margin-top:6px" id="gen"></div>
+  </footer>
+  </main>
+</div>
+<div class="tt" id="tt"></div>
+
+<script>
+const DATA = {"brand": "ATLAS \u2014 live paper-trading research record", "changelog": [{"bullets": ["Gate 3 merged to master; forward-calibration join wired into --daily; funnel line (fetched->in-scope->routed->scored->cleared->fired) printed every cycle.", "ntfy notifications (topic in atlas.yaml): every FIRE (high priority) + every daily-run failure (urgent; python-level via notify.py, shell-level via daily_run.sh curl).", "Track D politics research engine v0.1 LIVE, scorecard-only: breadth pre-filter (all in-domain, <=14d, soonest-first), GDELT AP/Reuters dated headlines, LLM (claude CLI haiku) for synthesis ONLY \u2014 strict JSON factors/class/adjustment-categories; ALL probability math in code (coded base-rate menu, +/-.04/.08 adjustments, net cap .15, clamp [.05,.95]); conf hard 0.40 (cannot fire). Hard cap 40 LLM calls/run; per-run cost logged to data/research_costs.jsonl; month-to-date spend + scored/day + checkpoint ETAs on the scoreboard. Combat stays gated on Track C.", "Economy: per the diagnostic, nothing moves; AAPL/NVDA watch-don't-trust."], "title": "v0.7 \u2014 2026-07-18 (Gate 3 approved \u2014 full execution)"}, {"bullets": ["Two-tier wall filed in PROTOCOL.md (+ cherry-picked to master, docs only): Tier 1 sandbox \u2014 unlimited point-in-time quant experiments, logged in sandbox/LOG.md with mechanism-story-first entries and attempt counts; results are NEVER evidence, a win earns only a registration ticket. Tier 2 record \u2014 unchanged, the only truth.", "Research-engine class excluded from sandbox entirely (hindsight contamination); accelerant = breadth: scorecard-only coverage widens to ALL in-domain pre-filter markets, \u22647d-resolution first; API cap respected; scored/day + projected checkpoint dates go in the weekly scoreboard (lands with Track D implementation post-gate).", "Track D protocol drafts updated accordingly."], "title": "v0.6.1 \u2014 2026-07-18 (SANDBOX TIER policy)"}, {"bullets": ["Track A': economy point-in-time diagnostic (SEC-by-filing-date + day- aligned Yahoo via as-of layer). n=10 (age-5) / 13 (age-1) \u2014 too thin; signal mildly AGAINST the model (market Brier better both variants); engine unchanged; AAPL/NVDA watch-don't-trust reinforced.", "Track B: non-binary plumbing \u2014 named-binary markets (outcome-indexed ledger/costs/resolution, is_named_binary scope, fire-path skip). 12 new unit checks + live integration (506 named, 62 in scope, 0 scored).", "Track D: research protocols v0.1 (politics, combat) + cost estimate (~$0-15/mo) + scorecard-only design. Never-backtest law for this class.", "Standing asset: forward_calibration.py (scored-history outcome join + per-engine checkpoints). Wire-in awaits Gate 3."], "title": "v0.6 \u2014 2026-07-18 (Phase 3 tracks \u2014 branch phase3-tracks, NOT merged)"}, {"bullets": ["Crypto v0.3 per registrations/2026-07-18_crypto_v0.3.md: per-kind Platt recalibration (touch A=-0.2088 B=0.6770; terminal A=-0.4468 B=1.1537, fit on 1,392 non-ETH backfill rows) + ETH-USD abstains (40% blind spot). Confidence tiers unchanged. Evidence: reports/backfill_crypto_v1.md.", "Pre-registered holdout: non-ETH markets resolving after 2026-07-18 (+ live record); verdict at n>=300; PASS = beat market Brier AND beat v0.2-raw on same rows; FAIL is final for v0.3 (Family-1 rule).", "Deploys to the daily loop from the 2026-07-19 run."], "title": "v0.5 \u2014 2026-07-18 (crypto engine v0.3 \u2014 registered redesign)"}], "engines": [{"gates": {"caps": 0, "confidence": 38, "fired": 0, "hurdle": 3}, "last_scored": "2026-07-19T03:25:24.939303+00:00", "markets_total": 15, "name": "crypto", "note": "v0.3: barrier/terminal price model on exchange daily closes, per-kind Platt recalibration frozen 2026-07-18. ETH-USD abstains \u2014 v0.2 was right on only 40% of ETH disagreements and the cause is unknown.", "routed_latest": 23, "scored_latest": 26, "scored_total": 41, "state": "LIVE"}, {"gates": {"caps": 0, "confidence": 12, "fired": 0, "hurdle": 0}, "last_scored": "2026-07-19T03:25:24.475498+00:00", "markets_total": 4, "name": "economy", "note": "v0.2: \u201clargest company by market cap\u201d races only, from SEC EDGAR shares + price history. All macro (Fed, CPI, recession) abstains \u2014 honest data paths not wired yet.", "routed_latest": 8, "scored_latest": 8, "scored_total": 12, "state": "LIVE"}, {"gates": {"caps": 0, "confidence": 0, "fired": 0, "hurdle": 0}, "last_scored": null, "markets_total": 0, "name": "sports", "note": "v0.1 head-to-head form model on tiny free-data samples; confidence deliberately capped at 0.45, below the 0.60 firing bar. Tournament futures abstain. A real data feed is a paid decision, still open.", "routed_latest": 123, "scored_latest": 0, "scored_total": 0, "state": "SCORES, CAN'T FIRE"}, {"gates": {"caps": 0, "confidence": 0, "fired": 0, "hurdle": 0}, "last_scored": null, "markets_total": 0, "name": "combat", "note": "No trustworthy free data source for MMA/boxing fundamentals; silence beats bad sources.", "routed_latest": 0, "scored_latest": 0, "scored_total": 0, "state": "ABSTAINS"}, {"gates": {"caps": 0, "confidence": 13, "fired": 0, "hurdle": 0}, "last_scored": "2026-07-19T03:25:28.909356+00:00", "markets_total": 13, "name": "politics", "note": "Highest hindsight-leak domain \u2014 scan-time news is already priced in. A v0 model here would be vibes with citations.", "routed_latest": 88, "scored_latest": 13, "scored_total": 13, "state": "ABSTAINS"}, {"gates": {"caps": 0, "confidence": 0, "fired": 0, "hurdle": 0}, "last_scored": null, "markets_total": 0, "name": "research", "note": "Deep-research engine not built yet.", "routed_latest": 0, "scored_latest": 0, "scored_total": 0, "state": "PENDING"}], "equity_curve": [{"equity": 5000.0, "label": "launch", "ts": "2026-07-18T16:02:19.140338+00:00"}, {"equity": 5000.0, "ts": "2026-07-19T01:15:26.981106+00:00"}, {"equity": 5000.0, "ts": "2026-07-19T03:22:46.734517+00:00"}], "funnel": {"domains": [{"domain": "sports", "median_hurdle_c": 4.4, "routed": 123}, {"domain": "politics", "median_hurdle_c": 4.4, "routed": 88}, {"domain": "crypto", "median_hurdle_c": 4.5, "routed": 23}, {"domain": "economy", "median_hurdle_c": 4.5, "routed": 8}], "run_ts": "2026-07-19T03:22:46.734517+00:00", "stages": [{"count": 6339, "died": null, "label": "markets fetched", "why": null}, {"count": 306, "died": 6033, "label": "inside 20\u201380\u00a2 band, live book", "why": "price outside band, thin book, no two-sided quotes, non-Yes/No outcomes, or past scheduled end"}, {"count": 242, "died": 64, "label": "routed to an engine", "why": "no domain match \u2014 unrouted markets are skipped by design"}, {"count": 47, "died": 195, "label": "scored (engine gave a probability)", "why": "engine abstained: out of scope, ambiguous wording, or no trustworthy data source"}, {"count": 2, "died": 45, "label": "cleared the confidence bar", "why": "engine confidence below the per-domain firing bar (crypto 0.65, economy 0.60)"}, {"count": 0, "died": 2, "label": "cleared the 2\u00d7 cost hurdle", "why": "edge vs the live book smaller than 2\u00d7 modeled costs (fees + slippage + half-spread)"}, {"count": 0, "died": 0, "label": "FIRED (paper bet placed)", "why": "concurrency / cluster / domain-share caps"}]}, "generated_utc": "2026-07-19T03:32:03.991948+00:00", "holdout": {"est_verdict": "Aug 09 \u2013 Aug 16, 2026 (registered expectation ~100/wk)", "insample_evidence": {"brier_market": 0.2152, "brier_v02_raw": 0.2045, "n": 2009}, "interim": null, "live_scored_distinct": 15, "registered": "Jul 18, 2026", "resolved_n": 0, "target_n": 300}, "house": null, "open_positions": [], "records": {"all": {"assumptions": "In-sample evidence in live clothing: the v0.3 calibration was FIT on these rows, order books were not archived (2\u00a2 spread assumed, base-band costs charged), and resolution timing is approximated by each market's horizon. The pre-registered holdout \u2014 not this replay \u2014 decides v0.3. Rules as deployed: ETH excluded, confidence \u2265 0.65, edge \u2265 2.0\u00d7 costs, 1 pick per cluster, max 10 open, 1% compounding from $5,000.", "balance": [{"equity": 5000.0, "ts": "2025-01-01T00:00:04+00:00"}, {"equity": 5013.39, "ts": "2025-09-01T04:48:07+00:00"}, {"equity": 5057.47, "ts": "2025-09-13T16:48:09+00:00"}, {"equity": 5103.34, "ts": "2025-09-16T16:48:01+00:00"}, {"equity": 5149.2, "ts": "2025-09-16T16:48:04+00:00"}, {"equity": 5195.16, "ts": "2025-09-19T16:48:02+00:00"}, {"equity": 5242.27, "ts": "2025-09-23T16:48:09+00:00"}, {"equity": 5252.6, "ts": "2025-10-01T04:48:03+00:00"}, {"equity": 5300.23, "ts": "2025-10-11T16:48:05+00:00"}, {"equity": 5320.91, "ts": "2025-10-12T16:48:07+00:00"}, {"equity": 5334.93, "ts": "2025-10-15T16:48:04+00:00"}, {"equity": 5280.78, "ts": "2025-11-01T04:48:09+00:00"}, {"equity": 5321.78, "ts": "2025-11-04T16:48:17+00:00"}, {"equity": 5333.03, "ts": "2025-11-04T16:48:18+00:00"}, {"equity": 5344.24, "ts": "2025-12-01T04:48:08+00:00"}, {"equity": 5389.33, "ts": "2025-12-22T16:48:18+00:00"}, {"equity": 5433.4, "ts": "2025-12-23T16:48:20+00:00"}, {"equity": 5476.66, "ts": "2025-12-23T16:48:36+00:00"}, {"equity": 5423.79, "ts": "2026-01-01T04:48:08+00:00"}, {"equity": 5437.45, "ts": "2026-03-01T04:48:22+00:00"}, {"equity": 5452.9, "ts": "2026-03-01T04:48:22+00:00"}, {"equity": 5473.17, "ts": "2026-03-01T04:48:28+00:00"}], "daily": {"2025-09-01": {"pnl": 13.39, "trades": 1, "wins": 1}, "2025-09-13": {"pnl": 44.08, "trades": 1, "wins": 1}, "2025-09-16": {"pnl": 91.74, "trades": 2, "wins": 2}, "2025-09-19": {"pnl": 45.96, "trades": 1, "wins": 1}, "2025-09-23": {"pnl": 47.11, "trades": 1, "wins": 1}, "2025-10-01": {"pnl": 10.33, "trades": 1, "wins": 1}, "2025-10-11": {"pnl": 47.63, "trades": 1, "wins": 1}, "2025-10-12": {"pnl": 20.68, "trades": 1, "wins": 1}, "2025-10-15": {"pnl": 14.02, "trades": 1, "wins": 1}, "2025-11-01": {"pnl": -54.16, "trades": 1, "wins": 0}, "2025-11-04": {"pnl": 52.25, "trades": 2, "wins": 2}, "2025-12-01": {"pnl": 11.21, "trades": 1, "wins": 1}, "2025-12-22": {"pnl": 45.09, "trades": 1, "wins": 1}, "2025-12-23": {"pnl": 87.33, "trades": 2, "wins": 2}, "2026-01-01": {"pnl": -52.87, "trades": 1, "wins": 0}, "2026-03-01": {"pnl": 49.38, "trades": 3, "wins": 3}}, "empty_reason": null, "final_equity": 5473.17, "journal": [{"bet": "2026-02-06", "coin": "XRP-USD", "edge_gross": 0.21387, "equity_after": 5473.17, "exec_price": 0.7095, "p_market": 0.3005, "p_model": 0.0766, "pnl": 20.27, "question": "Will XRP dip to $0.80 in February?", "resolved": "2026-03-01", "side": "NO", "stake": 54.24, "won": true}, {"bet": "2026-02-06", "coin": "BTC-USD", "edge_gross": 0.10832, "equity_after": 5452.9, "exec_price": 0.7595, "p_market": 0.2505, "p_model": 0.1322, "pnl": 15.45, "question": "Will Bitcoin dip to $50,000 in February?", "resolved": "2026-03-01", "side": "NO", "stake": 54.24, "won": true}, {"bet": "2026-02-02", "coin": "DOGE-USD", "edge_gross": 0.09185, "equity_after": 5437.45, "exec_price": 0.78, "p_market": 0.23, "p_model": 0.1281, "pnl": 13.66, "question": "Will Dogecoin reach $0.15 in February?", "resolved": "2026-03-01", "side": "NO", "stake": 54.24, "won": true}, {"bet": "2025-09-16", "coin": "XRP-USD", "edge_gross": 0.29156, "equity_after": 5423.79, "exec_price": 0.595, "p_market": 0.415, "p_model": 0.1134, "pnl": -52.87, "question": "Will XRP dip to $1.50 before 2026?", "resolved": "2026-01-01", "side": "NO", "stake": 50.57, "won": false}, {"bet": "2025-12-17", "coin": "SOL-USD", "edge_gross": 0.45303, "equity_after": 5476.66, "exec_price": 0.5375, "p_market": 0.4725, "p_model": 0.0095, "pnl": 43.26, "question": "Will the price of Solana be above $160 on December 23?", "resolved": "2025-12-23", "side": "NO", "stake": 53.44, "won": true}, {"bet": "2025-12-18", "coin": "XRP-USD", "edge_gross": 0.45643, "equity_after": 5433.4, "exec_price": 0.533, "p_market": 0.477, "p_model": 0.0106, "pnl": 44.07, "question": "Will the price of XRP be above $2.20 on December 23?", "resolved": "2025-12-23", "side": "NO", "stake": 53.44, "won": true}, {"bet": "2025-12-18", "coin": "BTC-USD", "edge_gross": 0.45526, "equity_after": 5389.33, "exec_price": 0.5275, "p_market": 0.5175, "p_model": 0.9828, "pnl": 45.09, "question": "Will the price of Bitcoin be above $78,000 on December 22?", "resolved": "2025-12-22", "side": "YES", "stake": 53.44, "won": true}, {"bet": "2025-11-22", "coin": "XRP-USD", "edge_gross": 0.06813, "equity_after": 5344.24, "exec_price": 0.8075, "p_market": 0.2025, "p_model": 0.1244, "pnl": 11.21, "question": "Will XRP dip to $1.60 in November?", "resolved": "2025-12-01", "side": "NO", "stake": 53.33, "won": true}, {"bet": "2025-11-01", "coin": "BTC-USD", "edge_gross": 0.18587, "equity_after": 5333.03, "exec_price": 0.807, "p_market": 0.203, "p_model": 0.0071, "pnl": 11.25, "question": "Will the price of Bitcoin be above $124,000 on November 4?", "resolved": "2025-11-04", "side": "NO", "stake": 53.35, "won": true}, {"bet": "2025-11-04", "coin": "XRP-USD", "edge_gross": 0.39162, "equity_after": 5321.78, "exec_price": 0.5475, "p_market": 0.5375, "p_model": 0.9391, "pnl": 41.0, "question": "Will the price of XRP be above $2.20 on November 4?", "resolved": "2025-11-04", "side": "YES", "stake": 52.81, "won": true}, {"bet": "2025-10-03", "coin": "DOGE-USD", "edge_gross": 0.16506, "equity_after": 5280.78, "exec_price": 0.77, "p_market": 0.24, "p_model": 0.0649, "pnl": -54.16, "question": "Will Dogecoin dip to $0.15 in October?", "resolved": "2025-11-01", "side": "NO", "stake": 52.53, "won": false}, {"bet": "2025-10-11", "coin": "SOL-USD", "edge_gross": 0.22237, "equity_after": 5334.93, "exec_price": 0.7705, "p_market": 0.2395, "p_model": 0.0071, "pnl": 14.02, "question": "Will the price of Solana be above $240 on October 15?", "resolved": "2025-10-15", "side": "NO", "stake": 52.53, "won": true}, {"bet": "2025-10-12", "coin": "XRP-USD", "edge_gross": 0.29187, "equity_after": 5320.91, "exec_price": 0.701, "p_market": 0.309, "p_model": 0.0071, "pnl": 20.68, "question": "Will the price of XRP be above $3.50 on October 12?", "resolved": "2025-10-12", "side": "NO", "stake": 53.0, "won": true}, {"bet": "2025-10-11", "coin": "XRP-USD", "edge_gross": 0.48287, "equity_after": 5300.23, "exec_price": 0.51, "p_market": 0.5, "p_model": 0.0071, "pnl": 47.63, "question": "Will the price of XRP be above $2.70 on October 11?", "resolved": "2025-10-11", "side": "NO", "stake": 52.53, "won": true}, {"bet": "2025-08-14", "coin": "BTC-USD", "edge_gross": 0.07108, "equity_after": 5252.6, "exec_price": 0.81, "p_market": 0.2, "p_model": 0.1189, "pnl": 10.33, "question": "Will Bitcoin hit $150k by September 30?", "resolved": "2025-10-01", "side": "NO", "stake": 50.0, "won": true}, {"bet": "2025-09-23", "coin": "XRP-USD", "edge_gross": 0.46456, "equity_after": 5242.27, "exec_price": 0.51, "p_market": 0.5, "p_model": 0.9746, "pnl": 47.11, "question": "Will the price of XRP be above $2.70 on September 23?", "resolved": "2025-09-23", "side": "YES", "stake": 51.95, "won": true}, {"bet": "2025-09-16", "coin": "BTC-USD", "edge_gross": 0.48337, "equity_after": 5195.16, "exec_price": 0.5095, "p_market": 0.5005, "p_model": 0.0071, "pnl": 45.96, "question": "Will the price of Bitcoin be above $124,000 on September 19?", "resolved": "2025-09-19", "side": "NO", "stake": 50.57, "won": true}, {"bet": "2025-09-16", "coin": "SOL-USD", "edge_gross": 0.47276, "equity_after": 5149.2, "exec_price": 0.51, "p_market": 0.5, "p_model": 0.9828, "pnl": 45.87, "question": "Will the price of Solana be above $200 on September 16?", "resolved": "2025-09-16", "side": "YES", "stake": 50.57, "won": true}, {"bet": "2025-09-16", "coin": "XRP-USD", "edge_gross": 0.48287, "equity_after": 5103.34, "exec_price": 0.51, "p_market": 0.5, "p_model": 0.0071, "pnl": 45.87, "question": "Will the price of XRP be above $3.40 on September 16?", "resolved": "2025-09-16", "side": "NO", "stake": 50.57, "won": true}, {"bet": "2025-09-13", "coin": "BTC-USD", "edge_gross": 0.47537, "equity_after": 5057.47, "exec_price": 0.5175, "p_market": 0.4925, "p_model": 0.0071, "pnl": 44.08, "question": "Will the price of Bitcoin be above $120,000 on September 13?", "resolved": "2025-09-13", "side": "NO", "stake": 50.13, "won": true}, {"bet": "2025-08-16", "coin": "SOL-USD", "edge_gross": 0.04783, "equity_after": 5013.39, "exec_price": 0.77, "p_market": 0.24, "p_model": 0.1822, "pnl": 13.39, "question": "Will Solana reach $230 in August?", "resolved": "2025-09-01", "side": "NO", "stake": 50.0, "won": true}], "label": "all engines combined \u2014 crypto is the only engine with a registered backtest so far", "scored_n": 1392, "start_equity": 5000.0, "stats": {"avg_loss": -53.52, "avg_win": 30.54, "best_day": 91.74, "day_win_rate": 0.875, "ev_per_trade": 22.53, "loss_days": 2, "losses": 2, "rr": 0.57, "streak_days": 9, "streak_trades": 10, "total_pnl": 473.17, "trades": 21, "win_days": 14, "win_rate": 0.9048, "win_rate_ci": [0.711, 0.973], "wins": 19, "worst_day": -54.16}}, "combat": {"assumptions": null, "balance": [], "daily": {}, "empty_reason": "No backtest: no trustworthy historical data source for MMA/boxing fundamentals \u2014 silence beats bad sources.", "final_equity": 5000.0, "journal": [], "label": "combat engine", "scored_n": 0, "start_equity": 5000.0, "stats": {"avg_loss": 0.0, "avg_win": 0.0, "best_day": null, "day_win_rate": null, "ev_per_trade": null, "loss_days": 0, "losses": 0, "rr": null, "streak_days": 0, "streak_trades": 0, "total_pnl": 0.0, "trades": 0, "win_days": 0, "win_rate": null, "win_rate_ci": null, "wins": 0, "worst_day": null}}, "crypto": {"assumptions": "In-sample evidence in live clothing: the v0.3 calibration was FIT on these rows, order books were not archived (2\u00a2 spread assumed, base-band costs charged), and resolution timing is approximated by each market's horizon. The pre-registered holdout \u2014 not this replay \u2014 decides v0.3. Rules as deployed: ETH excluded, confidence \u2265 0.65, edge \u2265 2.0\u00d7 costs, 1 pick per cluster, max 10 open, 1% compounding from $5,000.", "balance": [{"equity": 5000.0, "ts": "2025-01-01T00:00:04+00:00"}, {"equity": 5013.39, "ts": "2025-09-01T04:48:07+00:00"}, {"equity": 5057.47, "ts": "2025-09-13T16:48:09+00:00"}, {"equity": 5103.34, "ts": "2025-09-16T16:48:01+00:00"}, {"equity": 5149.2, "ts": "2025-09-16T16:48:04+00:00"}, {"equity": 5195.16, "ts": "2025-09-19T16:48:02+00:00"}, {"equity": 5242.27, "ts": "2025-09-23T16:48:09+00:00"}, {"equity": 5252.6, "ts": "2025-10-01T04:48:03+00:00"}, {"equity": 5300.23, "ts": "2025-10-11T16:48:05+00:00"}, {"equity": 5320.91, "ts": "2025-10-12T16:48:07+00:00"}, {"equity": 5334.93, "ts": "2025-10-15T16:48:04+00:00"}, {"equity": 5280.78, "ts": "2025-11-01T04:48:09+00:00"}, {"equity": 5321.78, "ts": "2025-11-04T16:48:17+00:00"}, {"equity": 5333.03, "ts": "2025-11-04T16:48:18+00:00"}, {"equity": 5344.24, "ts": "2025-12-01T04:48:08+00:00"}, {"equity": 5389.33, "ts": "2025-12-22T16:48:18+00:00"}, {"equity": 5433.4, "ts": "2025-12-23T16:48:20+00:00"}, {"equity": 5476.66, "ts": "2025-12-23T16:48:36+00:00"}, {"equity": 5423.79, "ts": "2026-01-01T04:48:08+00:00"}, {"equity": 5437.45, "ts": "2026-03-01T04:48:22+00:00"}, {"equity": 5452.9, "ts": "2026-03-01T04:48:22+00:00"}, {"equity": 5473.17, "ts": "2026-03-01T04:48:28+00:00"}], "daily": {"2025-09-01": {"pnl": 13.39, "trades": 1, "wins": 1}, "2025-09-13": {"pnl": 44.08, "trades": 1, "wins": 1}, "2025-09-16": {"pnl": 91.74, "trades": 2, "wins": 2}, "2025-09-19": {"pnl": 45.96, "trades": 1, "wins": 1}, "2025-09-23": {"pnl": 47.11, "trades": 1, "wins": 1}, "2025-10-01": {"pnl": 10.33, "trades": 1, "wins": 1}, "2025-10-11": {"pnl": 47.63, "trades": 1, "wins": 1}, "2025-10-12": {"pnl": 20.68, "trades": 1, "wins": 1}, "2025-10-15": {"pnl": 14.02, "trades": 1, "wins": 1}, "2025-11-01": {"pnl": -54.16, "trades": 1, "wins": 0}, "2025-11-04": {"pnl": 52.25, "trades": 2, "wins": 2}, "2025-12-01": {"pnl": 11.21, "trades": 1, "wins": 1}, "2025-12-22": {"pnl": 45.09, "trades": 1, "wins": 1}, "2025-12-23": {"pnl": 87.33, "trades": 2, "wins": 2}, "2026-01-01": {"pnl": -52.87, "trades": 1, "wins": 0}, "2026-03-01": {"pnl": 49.38, "trades": 3, "wins": 3}}, "empty_reason": null, "final_equity": 5473.17, "journal": [{"bet": "2026-02-06", "coin": "XRP-USD", "edge_gross": 0.21387, "equity_after": 5473.17, "exec_price": 0.7095, "p_market": 0.3005, "p_model": 0.0766, "pnl": 20.27, "question": "Will XRP dip to $0.80 in February?", "resolved": "2026-03-01", "side": "NO", "stake": 54.24, "won": true}, {"bet": "2026-02-06", "coin": "BTC-USD", "edge_gross": 0.10832, "equity_after": 5452.9, "exec_price": 0.7595, "p_market": 0.2505, "p_model": 0.1322, "pnl": 15.45, "question": "Will Bitcoin dip to $50,000 in February?", "resolved": "2026-03-01", "side": "NO", "stake": 54.24, "won": true}, {"bet": "2026-02-02", "coin": "DOGE-USD", "edge_gross": 0.09185, "equity_after": 5437.45, "exec_price": 0.78, "p_market": 0.23, "p_model": 0.1281, "pnl": 13.66, "question": "Will Dogecoin reach $0.15 in February?", "resolved": "2026-03-01", "side": "NO", "stake": 54.24, "won": true}, {"bet": "2025-09-16", "coin": "XRP-USD", "edge_gross": 0.29156, "equity_after": 5423.79, "exec_price": 0.595, "p_market": 0.415, "p_model": 0.1134, "pnl": -52.87, "question": "Will XRP dip to $1.50 before 2026?", "resolved": "2026-01-01", "side": "NO", "stake": 50.57, "won": false}, {"bet": "2025-12-17", "coin": "SOL-USD", "edge_gross": 0.45303, "equity_after": 5476.66, "exec_price": 0.5375, "p_market": 0.4725, "p_model": 0.0095, "pnl": 43.26, "question": "Will the price of Solana be above $160 on December 23?", "resolved": "2025-12-23", "side": "NO", "stake": 53.44, "won": true}, {"bet": "2025-12-18", "coin": "XRP-USD", "edge_gross": 0.45643, "equity_after": 5433.4, "exec_price": 0.533, "p_market": 0.477, "p_model": 0.0106, "pnl": 44.07, "question": "Will the price of XRP be above $2.20 on December 23?", "resolved": "2025-12-23", "side": "NO", "stake": 53.44, "won": true}, {"bet": "2025-12-18", "coin": "BTC-USD", "edge_gross": 0.45526, "equity_after": 5389.33, "exec_price": 0.5275, "p_market": 0.5175, "p_model": 0.9828, "pnl": 45.09, "question": "Will the price of Bitcoin be above $78,000 on December 22?", "resolved": "2025-12-22", "side": "YES", "stake": 53.44, "won": true}, {"bet": "2025-11-22", "coin": "XRP-USD", "edge_gross": 0.06813, "equity_after": 5344.24, "exec_price": 0.8075, "p_market": 0.2025, "p_model": 0.1244, "pnl": 11.21, "question": "Will XRP dip to $1.60 in November?", "resolved": "2025-12-01", "side": "NO", "stake": 53.33, "won": true}, {"bet": "2025-11-01", "coin": "BTC-USD", "edge_gross": 0.18587, "equity_after": 5333.03, "exec_price": 0.807, "p_market": 0.203, "p_model": 0.0071, "pnl": 11.25, "question": "Will the price of Bitcoin be above $124,000 on November 4?", "resolved": "2025-11-04", "side": "NO", "stake": 53.35, "won": true}, {"bet": "2025-11-04", "coin": "XRP-USD", "edge_gross": 0.39162, "equity_after": 5321.78, "exec_price": 0.5475, "p_market": 0.5375, "p_model": 0.9391, "pnl": 41.0, "question": "Will the price of XRP be above $2.20 on November 4?", "resolved": "2025-11-04", "side": "YES", "stake": 52.81, "won": true}, {"bet": "2025-10-03", "coin": "DOGE-USD", "edge_gross": 0.16506, "equity_after": 5280.78, "exec_price": 0.77, "p_market": 0.24, "p_model": 0.0649, "pnl": -54.16, "question": "Will Dogecoin dip to $0.15 in October?", "resolved": "2025-11-01", "side": "NO", "stake": 52.53, "won": false}, {"bet": "2025-10-11", "coin": "SOL-USD", "edge_gross": 0.22237, "equity_after": 5334.93, "exec_price": 0.7705, "p_market": 0.2395, "p_model": 0.0071, "pnl": 14.02, "question": "Will the price of Solana be above $240 on October 15?", "resolved": "2025-10-15", "side": "NO", "stake": 52.53, "won": true}, {"bet": "2025-10-12", "coin": "XRP-USD", "edge_gross": 0.29187, "equity_after": 5320.91, "exec_price": 0.701, "p_market": 0.309, "p_model": 0.0071, "pnl": 20.68, "question": "Will the price of XRP be above $3.50 on October 12?", "resolved": "2025-10-12", "side": "NO", "stake": 53.0, "won": true}, {"bet": "2025-10-11", "coin": "XRP-USD", "edge_gross": 0.48287, "equity_after": 5300.23, "exec_price": 0.51, "p_market": 0.5, "p_model": 0.0071, "pnl": 47.63, "question": "Will the price of XRP be above $2.70 on October 11?", "resolved": "2025-10-11", "side": "NO", "stake": 52.53, "won": true}, {"bet": "2025-08-14", "coin": "BTC-USD", "edge_gross": 0.07108, "equity_after": 5252.6, "exec_price": 0.81, "p_market": 0.2, "p_model": 0.1189, "pnl": 10.33, "question": "Will Bitcoin hit $150k by September 30?", "resolved": "2025-10-01", "side": "NO", "stake": 50.0, "won": true}, {"bet": "2025-09-23", "coin": "XRP-USD", "edge_gross": 0.46456, "equity_after": 5242.27, "exec_price": 0.51, "p_market": 0.5, "p_model": 0.9746, "pnl": 47.11, "question": "Will the price of XRP be above $2.70 on September 23?", "resolved": "2025-09-23", "side": "YES", "stake": 51.95, "won": true}, {"bet": "2025-09-16", "coin": "BTC-USD", "edge_gross": 0.48337, "equity_after": 5195.16, "exec_price": 0.5095, "p_market": 0.5005, "p_model": 0.0071, "pnl": 45.96, "question": "Will the price of Bitcoin be above $124,000 on September 19?", "resolved": "2025-09-19", "side": "NO", "stake": 50.57, "won": true}, {"bet": "2025-09-16", "coin": "SOL-USD", "edge_gross": 0.47276, "equity_after": 5149.2, "exec_price": 0.51, "p_market": 0.5, "p_model": 0.9828, "pnl": 45.87, "question": "Will the price of Solana be above $200 on September 16?", "resolved": "2025-09-16", "side": "YES", "stake": 50.57, "won": true}, {"bet": "2025-09-16", "coin": "XRP-USD", "edge_gross": 0.48287, "equity_after": 5103.34, "exec_price": 0.51, "p_market": 0.5, "p_model": 0.0071, "pnl": 45.87, "question": "Will the price of XRP be above $3.40 on September 16?", "resolved": "2025-09-16", "side": "NO", "stake": 50.57, "won": true}, {"bet": "2025-09-13", "coin": "BTC-USD", "edge_gross": 0.47537, "equity_after": 5057.47, "exec_price": 0.5175, "p_market": 0.4925, "p_model": 0.0071, "pnl": 44.08, "question": "Will the price of Bitcoin be above $120,000 on September 13?", "resolved": "2025-09-13", "side": "NO", "stake": 50.13, "won": true}, {"bet": "2025-08-16", "coin": "SOL-USD", "edge_gross": 0.04783, "equity_after": 5013.39, "exec_price": 0.77, "p_market": 0.24, "p_model": 0.1822, "pnl": 13.39, "question": "Will Solana reach $230 in August?", "resolved": "2025-09-01", "side": "NO", "stake": 50.0, "won": true}], "label": "crypto v0.3 rules replayed over the Jan 2025 \u2013 Jul 2026 harvest", "scored_n": 1392, "start_equity": 5000.0, "stats": {"avg_loss": -53.52, "avg_win": 30.54, "best_day": 91.74, "day_win_rate": 0.875, "ev_per_trade": 22.53, "loss_days": 2, "losses": 2, "rr": 0.57, "streak_days": 9, "streak_trades": 10, "total_pnl": 473.17, "trades": 21, "win_days": 14, "win_rate": 0.9048, "win_rate_ci": [0.711, 0.973], "wins": 19, "worst_day": -54.16}}, "economy": {"assumptions": null, "balance": [], "daily": {}, "empty_reason": "No replayable backtest: the only honest economy backfill (the cap-race diagnostic) is n=13 \u2014 far too small to simulate. This engine builds its record forward-only.", "final_equity": 5000.0, "journal": [], "label": "economy engine", "scored_n": 0, "start_equity": 5000.0, "stats": {"avg_loss": 0.0, "avg_win": 0.0, "best_day": null, "day_win_rate": null, "ev_per_trade": null, "loss_days": 0, "losses": 0, "rr": null, "streak_days": 0, "streak_trades": 0, "total_pnl": 0.0, "trades": 0, "win_days": 0, "win_rate": null, "win_rate_ci": null, "wins": 0, "worst_day": null}}, "politics": {"assumptions": null, "balance": [], "daily": {}, "empty_reason": "Declared un-backtestable: news-driven markets can't be reconstructed as-of past dates without hindsight leaks. Forward-only by law.", "final_equity": 5000.0, "journal": [], "label": "politics engine", "scored_n": 0, "start_equity": 5000.0, "stats": {"avg_loss": 0.0, "avg_win": 0.0, "best_day": null, "day_win_rate": null, "ev_per_trade": null, "loss_days": 0, "losses": 0, "rr": null, "streak_days": 0, "streak_trades": 0, "total_pnl": 0.0, "trades": 0, "win_days": 0, "win_rate": null, "win_rate_ci": null, "wins": 0, "worst_day": null}}, "research": {"assumptions": null, "balance": [], "daily": {}, "empty_reason": "Engine not built yet \u2014 nothing to replay.", "final_equity": 5000.0, "journal": [], "label": "research engine", "scored_n": 0, "start_equity": 5000.0, "stats": {"avg_loss": 0.0, "avg_win": 0.0, "best_day": null, "day_win_rate": null, "ev_per_trade": null, "loss_days": 0, "losses": 0, "rr": null, "streak_days": 0, "streak_trades": 0, "total_pnl": 0.0, "trades": 0, "win_days": 0, "win_rate": null, "win_rate_ci": null, "wins": 0, "worst_day": null}}, "sports": {"assumptions": null, "balance": [], "daily": {}, "empty_reason": "No backtest: free historical sports data is capped (TheSportsDB free tier) and a paid feed is an open decision. The engine scores live but its confidence is deliberately capped below the firing bar.", "final_equity": 5000.0, "journal": [], "label": "sports engine", "scored_n": 0, "start_equity": 5000.0, "stats": {"avg_loss": 0.0, "avg_win": 0.0, "best_day": null, "day_win_rate": null, "ev_per_trade": null, "loss_days": 0, "losses": 0, "rr": null, "streak_days": 0, "streak_trades": 0, "total_pnl": 0.0, "trades": 0, "win_days": 0, "win_rate": null, "win_rate_ci": null, "wins": 0, "worst_day": null}}}, "resolved_picks": [], "runs": [{"candidates": 0, "equity": 5000.0, "fetched": 6662, "fired": 0, "in_band": 255, "routed": 222, "ts": "2026-07-18T16:02:19.140338+00:00"}, {"candidates": 0, "equity": 5000.0, "fetched": 6769, "fired": 0, "in_band": 253, "routed": 191, "ts": "2026-07-19T01:15:26.981106+00:00"}, {"candidates": 0, "equity": 5000.0, "fetched": 6339, "fired": 0, "in_band": 306, "routed": 242, "ts": "2026-07-19T03:22:46.734517+00:00"}], "scored_table": [{"confidence": 0.4, "domain": "politics", "edge_gross": 0.1, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.046, "p_model": 0.9, "p_raw": null, "question": "Iran military action against a Gulf State on July 19?", "rationale": "[research-politics-v0.1] class=status_quo_holds_1mo base=0.90 net_adj=+0.00 -> p=0.90. YES: Historical precedent of Iran-Gulf state tensions; Iran's demonstrated willingness to use proxies for military action | NO: No escalation signals in recent headlines; No incident reports in last 7 days; Status quo holding as of deadline | 0 headlines (AP/Reuters, 7d).", "side": "YES", "ts": "2026-07-19T03:25:28.909356+00:00", "yes_price": 0.79}, {"confidence": 0.4, "domain": "politics", "edge_gross": 0.15, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.0406, "p_model": 0.86, "p_raw": null, "question": "Iran military action against a Gulf State on July 20?", "rationale": "[research-politics-v0.1] class=status_quo_holds_1mo base=0.90 net_adj=-0.04 -> p=0.86. YES: Persistent Iran-Gulf military tensions as ongoing geopolitical backdrop; Iran's demonstrated willingness to conduct direct military operations (regional precedent) | NO: No escalatory headlines or rhetoric from AP/Reuters in past 7 days; Single-day resolution window with no reported military positioning or readiness alerts; Absence of diplomatic crisis or triggering incident in recent news | 0 headlines (AP/Reuters, 7d).", "side": "YES", "ts": "2026-07-19T03:25:28.909356+00:00", "yes_price": 0.705}, {"confidence": 0.4, "domain": "politics", "edge_gross": 0.25, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.0445, "p_model": 0.82, "p_raw": null, "question": "Will Elon Musk post <40 tweets from July 18 to July 20, 2026?", "rationale": "[research-politics-v0.1] class=status_quo_holds_1mo base=0.90 net_adj=-0.08 -> p=0.82. YES: Musk occasionally experiences periods of reduced posting during travel or major business events; 40 tweets across 3 days (\u224813/day) is below his typical historical rate, suggesting constraint-heavy scenario; Summer season may include vacation or reduced operational intensity | NO: Musk's documented posting frequency typically ranges 20-50+ tweets per day under normal conditions; No reported travel, conference, or event conflicts mentioned for July 18-20; 3-day window is short; consistent with his baseline behavior pattern | 0 headlines (AP/Reuters, 7d).", "side": "YES", "ts": "2026-07-19T03:25:28.909356+00:00", "yes_price": 0.565}, {"confidence": 0.4, "domain": "politics", "edge_gross": 0.47, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.0438, "p_model": 0.86, "p_raw": null, "question": "Will Elon Musk post 40-64 tweets from July 18 to July 20, 2026?", "rationale": "[research-politics-v0.1] class=status_quo_holds_1mo base=0.90 net_adj=-0.04 -> p=0.86. YES: Elon Musk historically maintains extremely active tweeting, regularly posting 10-30+ times daily; 40-64 tweets over 3 days (13-21/day) falls within his documented baseline frequency range; X/Twitter is his primary communication channel; July 18-20 includes no known platform downtime or personal breaks | NO: Narrow 40-64 band is statistically difficult to hit; daily tweet volume exhibits high variance; Three-day observation windows show uneven distribution; missing target is common with tight precision bands; No recent news events to drive escalated or suppressed engagement above/below baseline | 0 headlines (AP/Reuters, 7d).", "side": "YES", "ts": "2026-07-19T03:25:28.909356+00:00", "yes_price": 0.385}, {"confidence": 0.4, "domain": "politics", "edge_gross": 0.6, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.03924, "p_model": 0.86, "p_raw": null, "question": "Will Elon Musk post 140-159 tweets from July 14 to July 21, 2026?", "rationale": "[research-politics-v0.1] class=status_quo_holds_1mo base=0.90 net_adj=-0.04 -> p=0.86. YES: Elon Musk maintains high baseline posting frequency on X/Twitter with multiple posts per day; Proposed target of ~17\u201320 tweets per day falls within historically observed posting patterns; No reported access restrictions or major events affecting platform engagement during this period | NO: Narrow band (140\u2013159 tweets) creates specific targeting requirement; daily posting frequency fluctuates based on business developments and external events; Historical volatility in daily posting count makes precise ranges difficult to hit consistently; Imminent deadline with partial period already elapsed limits ability to adjust for actual observed behavior | 0 headlines (AP/Reuters, 7d).", "side": "YES", "ts": "2026-07-19T03:25:28.909356+00:00", "yes_price": 0.255}, {"confidence": 0.4, "domain": "politics", "edge_gross": 0.59, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.0414, "p_model": 0.9, "p_raw": null, "question": "Will Elon Musk post 160-179 tweets from July 14 to July 21, 2026?", "rationale": "[research-politics-v0.1] class=status_quo_holds_1mo base=0.90 net_adj=+0.00 -> p=0.90. YES: Elon Musk maintains active X presence as platform owner; Historical baseline suggests consistent high posting volume | NO: 160-179 tweets in 8 days requires ~20+ posts/day, above typical pace; No timeline-specific context provided | 0 headlines (AP/Reuters, 7d).", "side": "YES", "ts": "2026-07-19T03:25:28.909356+00:00", "yes_price": 0.305}, {"confidence": 0.4, "domain": "politics", "edge_gross": 0.23, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.04212, "p_model": 0.9, "p_raw": null, "question": "Iran military action against a Gulf State on July 21?", "rationale": "[research-politics-v0.1] class=status_quo_holds_1mo base=0.90 net_adj=+0.00 -> p=0.90. YES: Iran possesses demonstrated capability to conduct maritime and land-based strikes against Gulf targets; Persistent Iran-GCC tensions and ongoing regional proxy competition | NO: No reported escalatory signals or military mobilization in available data; Short 3-day window makes spontaneous unplanned escalation unlikely; Gulf states maintain active air defenses and regional deterrence posture | 0 headlines (AP/Reuters, 7d).", "side": "YES", "ts": "2026-07-19T03:25:28.909356+00:00", "yes_price": 0.665}, {"confidence": 0.4, "domain": "politics", "edge_gross": 0.19, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.03876, "p_model": 0.94, "p_raw": null, "question": "Israel x Iran ceasefire continues through July 22?", "rationale": "[research-politics-v0.1] class=status_quo_holds_1mo base=0.90 net_adj=+0.04 -> p=0.94. YES: 3-day window is too short for major escalation or formal breach; Ceasefire in place suggests active diplomatic channels; No reported provocations in recent week | NO: Israel-Iran confrontations historically volatile and prone to rapid escalation; Proxy forces (Hezbollah, PMU) can act independently of formal agreements; Accidental escalation or miscalculation risk during heightened tension | 0 headlines (AP/Reuters, 7d).", "side": "YES", "ts": "2026-07-19T03:25:28.909356+00:00", "yes_price": 0.745}, {"confidence": 0.4, "domain": "politics", "edge_gross": 0.33, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.0445, "p_model": 0.9, "p_raw": null, "question": "Iran military action against a Gulf State on July 22?", "rationale": "[research-politics-v0.1] class=status_quo_holds_1mo base=0.90 net_adj=+0.00 -> p=0.90. YES: Historical Iran-Gulf State military tensions; July 22 falls within ongoing regional instability period | NO: No escalatory military activity reported in last 7 days; No apparent trigger event announced for July 22 date | 0 headlines (AP/Reuters, 7d).", "side": "YES", "ts": "2026-07-19T03:25:28.909356+00:00", "yes_price": 0.565}, {"confidence": 0.4, "domain": "politics", "edge_gross": 0.56, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.04244, "p_model": 0.9, "p_raw": null, "question": "Will Elon Musk post <40 tweets from July 20 to July 22, 2026?", "rationale": "[research-politics-v0.1] class=status_quo_holds_1mo base=0.90 net_adj=+0.00 -> p=0.90. YES: Elon Musk's historical baseline tweeting volume typically exceeds 40 tweets across any 3-day period; No reported major disruptions or scheduling conflicts in the prediction window | NO: Possible reduced engagement during critical operational priorities or business crises | 0 headlines (AP/Reuters, 7d).", "side": "YES", "ts": "2026-07-19T03:25:28.909356+00:00", "yes_price": 0.335}, {"confidence": 0.4, "domain": "politics", "edge_gross": 0.43, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.0449, "p_model": 0.9, "p_raw": null, "question": "Will Elon Musk post 40-64 tweets from July 20 to July 22, 2026?", "rationale": "[research-politics-v0.1] class=status_quo_holds_1mo base=0.90 net_adj=+0.00 -> p=0.90. YES: Musk's documented history as a highly active Twitter user; 13-21 tweets/day over 3 days falls within his typical daily posting range; No reported major events constraining his availability during July 20-22 | NO: Absence of specific catalysts (product launches, controversies, earnings) that drive elevated posting; His daily posting volume is volatile and context-dependent; Business travel or intensive focus on X/Tesla operations could suppress activity | 0 headlines (AP/Reuters, 7d).", "side": "YES", "ts": "2026-07-19T03:25:28.909356+00:00", "yes_price": 0.465}, {"confidence": 0.4, "domain": "politics", "edge_gross": 0.2, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.041, "p_model": 0.9, "p_raw": null, "question": "Iran military action against a Gulf State on July 23?", "rationale": "[research-politics-v0.1] class=status_quo_holds_1mo base=0.90 net_adj=+0.00 -> p=0.90. YES: Historical pattern of Iranian military posturing against Gulf states and strategic competitors; Ongoing regional tensions over Strait of Hormuz and sanctions regime; IRGC track record of conducting limited strikes or operations to signal resolve | NO: Absence of recent escalation headlines or elevated threat warnings in last 7 days; U.S. naval presence and air defense systems provide credible deterrence; Economic costs of direct military action given existing sanctions pressure | 0 headlines (AP/Reuters, 7d).", "side": "YES", "ts": "2026-07-19T03:25:28.909356+00:00", "yes_price": 0.695}, {"confidence": 0.4, "domain": "politics", "edge_gross": 0.68, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.03716, "p_model": 0.9, "p_raw": null, "question": "Will Elon Musk post 160-179 tweets from July 17 to July 24, 2026?", "rationale": "[research-politics-v0.1] class=status_quo_holds_1mo base=0.90 net_adj=+0.00 -> p=0.90. YES: Elon Musk maintains active, frequent posting patterns on X/Twitter; July 17-24 is a regular business period with no known major disruptions announced | NO: 160-179 tweets per week (~23-26 daily) requires sustained high-frequency engagement; No baseline data provided to confirm this rate matches his historical weekly average | 0 headlines (AP/Reuters, 7d).", "side": "YES", "ts": "2026-07-19T03:25:28.909356+00:00", "yes_price": 0.215}, {"confidence": 0.55, "domain": "crypto", "edge_gross": 0.0324, "fired": false, "gate": "confidence 0.55 < 0.65 bar", "hurdle_base": 0.08304, "p_model": 0.3924, "p_raw": 0.4164, "question": "Will Solana dip to $70 in July?", "rationale": "SOL-USD: spot 75.81, barrier 70 (touch down), 13.0d horizon, realized daily vol 2.72% (n=95 closes) -> driftless touch prob raw 41.6%, v0.3-calibrated 39.2% (0.81 sigma).", "side": "YES", "ts": "2026-07-19T03:25:24.939303+00:00", "yes_price": 0.335}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.1082, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.04244, "p_model": 0.5518, "p_raw": 0.6382, "question": "Will the price of Bitcoin be above $64,000 on July 21?", "rationale": "BTC-USD: spot 64,596.55, barrier 64,000 (terminal up), 2.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless terminal prob raw 63.8%, v0.3-calibrated 55.2% (0.35 sigma).", "side": "NO", "ts": "2026-07-19T03:25:24.715313+00:00", "yes_price": 0.665}, {"confidence": 0.5, "domain": "economy", "edge_gross": 0.1748, "fired": false, "gate": "confidence 0.50 < 0.60 bar", "hurdle_base": 0.0329, "p_model": 0.4988, "p_raw": null, "question": "Will Apple be the largest company in the world by market cap on December 31?", "rationale": "AAPL cap $4.90T (shares as of 2026-04-17) vs top rival NVDA $4.91T -> log gap -0.001; ratio vol 3.18%/d over 61d, horizon 164d -> P(largest at end date)=49.9% (terminal, driftless; 'by/on' treated as end-date snapshot). Field checked: NVDA/AAPL/MSFT.", "side": "YES", "ts": "2026-07-19T03:25:24.475498+00:00", "yes_price": 0.3235}, {"confidence": 0.5, "domain": "economy", "edge_gross": 0.0488, "fired": false, "gate": "confidence 0.50 < 0.60 bar", "hurdle_base": 0.04476, "p_model": 0.5012, "p_raw": null, "question": "Will NVIDIA be the largest company in the world by market cap on December 31?", "rationale": "NVDA cap $4.91T (shares as of 2026-05-15) vs top rival AAPL $4.90T -> log gap +0.001; ratio vol 3.18%/d over 61d, horizon 164d -> P(largest at end date)=50.1% (terminal, driftless; 'by/on' treated as end-date snapshot). Field checked: NVDA/AAPL/MSFT.", "side": "NO", "ts": "2026-07-19T03:25:24.475187+00:00", "yes_price": 0.555}, {"confidence": 0.5, "domain": "economy", "edge_gross": 0.0534, "fired": false, "gate": "confidence 0.50 < 0.60 bar", "hurdle_base": 0.03766, "p_model": 0.4954, "p_raw": null, "question": "Will Apple be the largest company in the world by market cap on July 31?", "rationale": "AAPL cap $4.90T (shares as of 2026-04-17) vs top rival NVDA $4.91T -> log gap -0.001; ratio vol 3.18%/d over 61d, horizon 12d -> P(largest at end date)=49.5% (terminal, driftless; 'by/on' treated as end-date snapshot). Field checked: NVDA/AAPL/MSFT.", "side": "YES", "ts": "2026-07-19T03:25:24.474105+00:00", "yes_price": 0.4405}, {"confidence": 0.5, "domain": "economy", "edge_gross": 0.0154, "fired": false, "gate": "confidence 0.50 < 0.60 bar", "hurdle_base": 0.05496, "p_model": 0.5046, "p_raw": null, "question": "Will NVIDIA be the largest company in the world by market cap on July 31?", "rationale": "NVDA cap $4.91T (shares as of 2026-05-15) vs top rival AAPL $4.90T -> log gap +0.001; ratio vol 3.18%/d over 61d, horizon 12d -> P(largest at end date)=50.5% (terminal, driftless; 'by/on' treated as end-date snapshot). Field checked: NVDA/AAPL/MSFT.", "side": "NO", "ts": "2026-07-19T03:25:24.473256+00:00", "yes_price": 0.53}, {"confidence": 0.55, "domain": "crypto", "edge_gross": 0.0175, "fired": false, "gate": "confidence 0.55 < 0.65 bar", "hurdle_base": 0.04176, "p_model": 0.3025, "p_raw": 0.2838, "question": "Will Bitcoin dip to $50,000 by December 31, 2026?", "rationale": "BTC-USD: spot 64,596.55, barrier 50,000 (touch down), 166.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 28.4%, v0.3-calibrated 30.3% (1.07 sigma).", "side": "NO", "ts": "2026-07-19T03:25:22.896012+00:00", "yes_price": 0.325}, {"confidence": 0.65, "domain": "crypto", "edge_gross": 0.0266, "fired": false, "gate": "edge +2.7\u00a2 < 4.7\u00a2 hurdle (2\u00d7 base costs)", "hurdle_base": 0.0466, "p_model": 0.1834, "p_raw": 0.1304, "question": "Will Bitcoin dip to $45,000 by December 31, 2026?", "rationale": "BTC-USD: spot 64,596.55, barrier 45,000 (touch down), 166.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 13.0%, v0.3-calibrated 18.3% (1.51 sigma).", "side": "NO", "ts": "2026-07-19T03:25:22.895539+00:00", "yes_price": 0.22}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.0313, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.04496, "p_model": 0.4487, "p_raw": 0.501, "question": "Will Bitcoin dip to $55,000 by December 31, 2026?", "rationale": "BTC-USD: spot 64,596.55, barrier 55,000 (touch down), 166.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 50.1%, v0.3-calibrated 44.9% (0.67 sigma).", "side": "NO", "ts": "2026-07-19T03:25:22.894875+00:00", "yes_price": 0.485}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.1104, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.03972, "p_model": 0.6196, "p_raw": 0.7368, "question": "Will Bitcoin reach $70,000 by December 31, 2026?", "rationale": "BTC-USD: spot 64,596.55, barrier 70,000 (touch up), 166.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 73.7%, v0.3-calibrated 62.0% (0.34 sigma).", "side": "NO", "ts": "2026-07-19T03:25:22.894001+00:00", "yes_price": 0.735}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.0104, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.04496, "p_model": 0.4696, "p_raw": 0.5321, "question": "Will Bitcoin reach $75,000 by December 31, 2026?", "rationale": "BTC-USD: spot 64,596.55, barrier 75,000 (touch up), 166.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 53.2%, v0.3-calibrated 47.0% (0.62 sigma).", "side": "NO", "ts": "2026-07-19T03:25:22.892922+00:00", "yes_price": 0.485}, {"confidence": 0.55, "domain": "crypto", "edge_gross": 0.022, "fired": false, "gate": "confidence 0.55 < 0.65 bar", "hurdle_base": 0.04244, "p_model": 0.362, "p_raw": 0.3709, "question": "Will Bitcoin reach $80,000 by December 31, 2026?", "rationale": "BTC-USD: spot 64,596.55, barrier 80,000 (touch up), 166.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 37.1%, v0.3-calibrated 36.2% (0.89 sigma).", "side": "YES", "ts": "2026-07-19T03:25:22.892121+00:00", "yes_price": 0.335}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.0912, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.0406, "p_model": 0.6188, "p_raw": 0.6915, "question": "Will the price of Bitcoin be above $64,000 on July 20?", "rationale": "BTC-USD: spot 64,596.55, barrier 64,000 (terminal up), 1.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless terminal prob raw 69.2%, v0.3-calibrated 61.9% (0.50 sigma).", "side": "NO", "ts": "2026-07-19T03:25:22.730834+00:00", "yes_price": 0.715}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.0441, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.04742, "p_model": 0.5319, "p_raw": 0.6218, "question": "Will Bitcoin dip to $62,500 in July?", "rationale": "BTC-USD: spot 64,596.55, barrier 62,500 (touch down), 13.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 62.2%, v0.3-calibrated 53.2% (0.49 sigma).", "side": "NO", "ts": "2026-07-19T03:25:22.729631+00:00", "yes_price": 0.5825}, {"confidence": 0.55, "domain": "crypto", "edge_gross": 0.0425, "fired": false, "gate": "confidence 0.55 < 0.65 bar", "hurdle_base": 0.03876, "p_model": 0.2925, "p_raw": 0.2697, "question": "Will Bitcoin dip to $60,000 in July?", "rationale": "BTC-USD: spot 64,596.55, barrier 60,000 (touch down), 13.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 27.0%, v0.3-calibrated 29.3% (1.10 sigma).", "side": "YES", "ts": "2026-07-19T03:25:22.729087+00:00", "yes_price": 0.245}, {"confidence": 0.4, "domain": "crypto", "edge_gross": -0.0047, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.04484, "p_model": 0.4553, "p_raw": 0.5109, "question": "Will Bitcoin reach $67,500 in July?", "rationale": "BTC-USD: spot 64,596.55, barrier 67,500 (touch up), 13.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 51.1%, v0.3-calibrated 45.5% (0.66 sigma).", "side": "YES", "ts": "2026-07-19T03:25:22.728498+00:00", "yes_price": 0.455}, {"confidence": 0.55, "domain": "crypto", "edge_gross": 0.0535, "fired": false, "gate": "confidence 0.55 < 0.65 bar", "hurdle_base": 0.03658, "p_model": 0.2635, "p_raw": 0.2297, "question": "Will Bitcoin reach $70,000 in July?", "rationale": "BTC-USD: spot 64,596.55, barrier 70,000 (touch up), 13.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 23.0%, v0.3-calibrated 26.3% (1.20 sigma).", "side": "YES", "ts": "2026-07-19T03:25:22.726217+00:00", "yes_price": 0.205}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.0994, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.04244, "p_model": 0.5606, "p_raw": 0.6453, "question": "Will the price of Bitcoin be above $64,000 on July 21?", "rationale": "BTC-USD: spot 64,628.69, barrier 64,000 (terminal up), 2.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless terminal prob raw 64.5%, v0.3-calibrated 56.1% (0.37 sigma).", "side": "NO", "ts": "2026-07-19T03:22:51.826046+00:00", "yes_price": 0.665}, {"confidence": 0.55, "domain": "crypto", "edge_gross": 0.0324, "fired": false, "gate": "confidence 0.55 < 0.65 bar", "hurdle_base": 0.08304, "p_model": 0.3924, "p_raw": 0.4164, "question": "Will Solana dip to $70 in July?", "rationale": "SOL-USD: spot 75.81, barrier 70 (touch down), 13.0d horizon, realized daily vol 2.72% (n=95 closes) -> driftless touch prob raw 41.6%, v0.3-calibrated 39.2% (0.81 sigma).", "side": "YES", "ts": "2026-07-19T03:22:51.825493+00:00", "yes_price": 0.335}, {"confidence": 0.5, "domain": "economy", "edge_gross": 0.1748, "fired": false, "gate": "confidence 0.50 < 0.60 bar", "hurdle_base": 0.0329, "p_model": 0.4988, "p_raw": null, "question": "Will Apple be the largest company in the world by market cap on December 31?", "rationale": "AAPL cap $4.90T (shares as of 2026-04-17) vs top rival NVDA $4.91T -> log gap -0.001; ratio vol 3.18%/d over 61d, horizon 164d -> P(largest at end date)=49.9% (terminal, driftless; 'by/on' treated as end-date snapshot). Field checked: NVDA/AAPL/MSFT.", "side": "YES", "ts": "2026-07-19T03:22:51.323959+00:00", "yes_price": 0.3235}, {"confidence": 0.5, "domain": "economy", "edge_gross": 0.0488, "fired": false, "gate": "confidence 0.50 < 0.60 bar", "hurdle_base": 0.04476, "p_model": 0.5012, "p_raw": null, "question": "Will NVIDIA be the largest company in the world by market cap on December 31?", "rationale": "NVDA cap $4.91T (shares as of 2026-05-15) vs top rival AAPL $4.90T -> log gap +0.001; ratio vol 3.18%/d over 61d, horizon 164d -> P(largest at end date)=50.1% (terminal, driftless; 'by/on' treated as end-date snapshot). Field checked: NVDA/AAPL/MSFT.", "side": "NO", "ts": "2026-07-19T03:22:51.323597+00:00", "yes_price": 0.555}, {"confidence": 0.5, "domain": "economy", "edge_gross": 0.0534, "fired": false, "gate": "confidence 0.50 < 0.60 bar", "hurdle_base": 0.03766, "p_model": 0.4954, "p_raw": null, "question": "Will Apple be the largest company in the world by market cap on July 31?", "rationale": "AAPL cap $4.90T (shares as of 2026-04-17) vs top rival NVDA $4.91T -> log gap -0.001; ratio vol 3.18%/d over 61d, horizon 12d -> P(largest at end date)=49.5% (terminal, driftless; 'by/on' treated as end-date snapshot). Field checked: NVDA/AAPL/MSFT.", "side": "YES", "ts": "2026-07-19T03:22:51.322357+00:00", "yes_price": 0.4405}, {"confidence": 0.5, "domain": "economy", "edge_gross": 0.0154, "fired": false, "gate": "confidence 0.50 < 0.60 bar", "hurdle_base": 0.05496, "p_model": 0.5046, "p_raw": null, "question": "Will NVIDIA be the largest company in the world by market cap on July 31?", "rationale": "NVDA cap $4.91T (shares as of 2026-05-15) vs top rival AAPL $4.90T -> log gap +0.001; ratio vol 3.18%/d over 61d, horizon 12d -> P(largest at end date)=50.5% (terminal, driftless; 'by/on' treated as end-date snapshot). Field checked: NVDA/AAPL/MSFT.", "side": "NO", "ts": "2026-07-19T03:22:51.321592+00:00", "yes_price": 0.53}, {"confidence": 0.55, "domain": "crypto", "edge_gross": 0.0181, "fired": false, "gate": "confidence 0.55 < 0.65 bar", "hurdle_base": 0.04176, "p_model": 0.3019, "p_raw": 0.2829, "question": "Will Bitcoin dip to $50,000 by December 31, 2026?", "rationale": "BTC-USD: spot 64,628.69, barrier 50,000 (touch down), 166.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 28.3%, v0.3-calibrated 30.2% (1.07 sigma).", "side": "NO", "ts": "2026-07-19T03:22:49.302724+00:00", "yes_price": 0.325}, {"confidence": 0.65, "domain": "crypto", "edge_gross": 0.0271, "fired": false, "gate": "edge +2.7\u00a2 < 4.7\u00a2 hurdle (2\u00d7 base costs)", "hurdle_base": 0.0466, "p_model": 0.1829, "p_raw": 0.1299, "question": "Will Bitcoin dip to $45,000 by December 31, 2026?", "rationale": "BTC-USD: spot 64,628.69, barrier 45,000 (touch down), 166.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 13.0%, v0.3-calibrated 18.3% (1.51 sigma).", "side": "NO", "ts": "2026-07-19T03:22:49.302236+00:00", "yes_price": 0.22}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.0322, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.04496, "p_model": 0.4478, "p_raw": 0.4997, "question": "Will Bitcoin dip to $55,000 by December 31, 2026?", "rationale": "BTC-USD: spot 64,628.69, barrier 55,000 (touch down), 166.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 50.0%, v0.3-calibrated 44.8% (0.68 sigma).", "side": "NO", "ts": "2026-07-19T03:22:49.301901+00:00", "yes_price": 0.485}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.1091, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.03972, "p_model": 0.6209, "p_raw": 0.7383, "question": "Will Bitcoin reach $70,000 by December 31, 2026?", "rationale": "BTC-USD: spot 64,628.69, barrier 70,000 (touch up), 166.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 73.8%, v0.3-calibrated 62.1% (0.33 sigma).", "side": "NO", "ts": "2026-07-19T03:22:49.301443+00:00", "yes_price": 0.735}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.0095, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.04496, "p_model": 0.4705, "p_raw": 0.5335, "question": "Will Bitcoin reach $75,000 by December 31, 2026?", "rationale": "BTC-USD: spot 64,628.69, barrier 75,000 (touch up), 166.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 53.3%, v0.3-calibrated 47.1% (0.62 sigma).", "side": "NO", "ts": "2026-07-19T03:22:49.300982+00:00", "yes_price": 0.485}, {"confidence": 0.55, "domain": "crypto", "edge_gross": 0.0228, "fired": false, "gate": "confidence 0.55 < 0.65 bar", "hurdle_base": 0.04244, "p_model": 0.3628, "p_raw": 0.372, "question": "Will Bitcoin reach $80,000 by December 31, 2026?", "rationale": "BTC-USD: spot 64,628.69, barrier 80,000 (touch up), 166.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 37.2%, v0.3-calibrated 36.3% (0.89 sigma).", "side": "YES", "ts": "2026-07-19T03:22:49.300040+00:00", "yes_price": 0.335}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.0892, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.04016, "p_model": 0.6308, "p_raw": 0.7009, "question": "Will the price of Bitcoin be above $64,000 on July 20?", "rationale": "BTC-USD: spot 64,628.69, barrier 64,000 (terminal up), 1.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless terminal prob raw 70.1%, v0.3-calibrated 63.1% (0.53 sigma).", "side": "NO", "ts": "2026-07-19T03:22:48.930328+00:00", "yes_price": 0.725}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.0459, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.04946, "p_model": 0.5281, "p_raw": 0.6165, "question": "Will Bitcoin dip to $62,500 in July?", "rationale": "BTC-USD: spot 64,628.69, barrier 62,500 (touch down), 13.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 61.7%, v0.3-calibrated 52.8% (0.50 sigma).", "side": "NO", "ts": "2026-07-19T03:22:48.929920+00:00", "yes_price": 0.5815}, {"confidence": 0.55, "domain": "crypto", "edge_gross": 0.0402, "fired": false, "gate": "confidence 0.55 < 0.65 bar", "hurdle_base": 0.03876, "p_model": 0.2902, "p_raw": 0.2665, "question": "Will Bitcoin dip to $60,000 in July?", "rationale": "BTC-USD: spot 64,628.69, barrier 60,000 (touch down), 13.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 26.7%, v0.3-calibrated 29.0% (1.11 sigma).", "side": "YES", "ts": "2026-07-19T03:22:48.929783+00:00", "yes_price": 0.245}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.0015, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.05484, "p_model": 0.4585, "p_raw": 0.5157, "question": "Will Bitcoin reach $67,500 in July?", "rationale": "BTC-USD: spot 64,628.69, barrier 67,500 (touch up), 13.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 51.6%, v0.3-calibrated 45.9% (0.65 sigma).", "side": "NO", "ts": "2026-07-19T03:22:48.929624+00:00", "yes_price": 0.47}, {"confidence": 0.55, "domain": "crypto", "edge_gross": 0.0456, "fired": false, "gate": "confidence 0.55 < 0.65 bar", "hurdle_base": 0.03716, "p_model": 0.2656, "p_raw": 0.2326, "question": "Will Bitcoin reach $70,000 in July?", "rationale": "BTC-USD: spot 64,628.69, barrier 70,000 (touch up), 13.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 23.3%, v0.3-calibrated 26.6% (1.19 sigma).", "side": "YES", "ts": "2026-07-19T03:22:48.927974+00:00", "yes_price": 0.215}, {"confidence": 0.4, "domain": "crypto", "edge_gross": -0.0063, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.12418, "p_model": 0.4037, "p_raw": 0.4335, "question": "Will Solana dip to $70 in July?", "rationale": "SOL-USD: spot 75.59, barrier 70 (touch down), 13.0d horizon, realized daily vol 2.72% (n=95 closes) -> driftless touch prob raw 43.3%, v0.3-calibrated 40.4% (0.78 sigma).", "side": "YES", "ts": "2026-07-19T01:15:34.564369+00:00", "yes_price": 0.365}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.0926, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.0377, "p_model": 0.1374, "p_raw": 0.2306, "question": "Will the price of Bitcoin be above $66,000 on July 21?", "rationale": "BTC-USD: spot 64,736.26, barrier 66,000 (terminal up), 2.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless terminal prob raw 23.1%, v0.3-calibrated 13.7% (0.74 sigma).", "side": "NO", "ts": "2026-07-19T01:15:34.000725+00:00", "yes_price": 0.235}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.1103, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.041, "p_model": 0.5897, "p_raw": 0.6686, "question": "Will the price of Bitcoin be above $64,000 on July 21?", "rationale": "BTC-USD: spot 64,736.26, barrier 64,000 (terminal up), 2.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless terminal prob raw 66.9%, v0.3-calibrated 59.0% (0.44 sigma).", "side": "NO", "ts": "2026-07-19T01:15:33.999966+00:00", "yes_price": 0.705}, {"confidence": 0.5, "domain": "economy", "edge_gross": 0.1668, "fired": false, "gate": "confidence 0.50 < 0.60 bar", "hurdle_base": 0.04018, "p_model": 0.4988, "p_raw": null, "question": "Will Apple be the largest company in the world by market cap on December 31?", "rationale": "AAPL cap $4.90T (shares as of 2026-04-17) vs top rival NVDA $4.91T -> log gap -0.001; ratio vol 3.18%/d over 61d, horizon 164d -> P(largest at end date)=49.9% (terminal, driftless; 'by/on' treated as end-date snapshot). Field checked: NVDA/AAPL/MSFT.", "side": "YES", "ts": "2026-07-19T01:15:33.698956+00:00", "yes_price": 0.328}, {"confidence": 0.5, "domain": "economy", "edge_gross": 0.0488, "fired": false, "gate": "confidence 0.50 < 0.60 bar", "hurdle_base": 0.04476, "p_model": 0.5012, "p_raw": null, "question": "Will NVIDIA be the largest company in the world by market cap on December 31?", "rationale": "NVDA cap $4.91T (shares as of 2026-05-15) vs top rival AAPL $4.90T -> log gap +0.001; ratio vol 3.18%/d over 61d, horizon 164d -> P(largest at end date)=50.1% (terminal, driftless; 'by/on' treated as end-date snapshot). Field checked: NVDA/AAPL/MSFT.", "side": "NO", "ts": "2026-07-19T01:15:33.698616+00:00", "yes_price": 0.555}, {"confidence": 0.5, "domain": "economy", "edge_gross": 0.0534, "fired": false, "gate": "confidence 0.50 < 0.60 bar", "hurdle_base": 0.03766, "p_model": 0.4954, "p_raw": null, "question": "Will Apple be the largest company in the world by market cap on July 31?", "rationale": "AAPL cap $4.90T (shares as of 2026-04-17) vs top rival NVDA $4.91T -> log gap -0.001; ratio vol 3.18%/d over 61d, horizon 12d -> P(largest at end date)=49.5% (terminal, driftless; 'by/on' treated as end-date snapshot). Field checked: NVDA/AAPL/MSFT.", "side": "YES", "ts": "2026-07-19T01:15:33.697728+00:00", "yes_price": 0.4405}, {"confidence": 0.5, "domain": "economy", "edge_gross": 0.0154, "fired": false, "gate": "confidence 0.50 < 0.60 bar", "hurdle_base": 0.05496, "p_model": 0.5046, "p_raw": null, "question": "Will NVIDIA be the largest company in the world by market cap on July 31?", "rationale": "NVDA cap $4.91T (shares as of 2026-05-15) vs top rival AAPL $4.90T -> log gap +0.001; ratio vol 3.18%/d over 61d, horizon 12d -> P(largest at end date)=50.5% (terminal, driftless; 'by/on' treated as end-date snapshot). Field checked: NVDA/AAPL/MSFT.", "side": "NO", "ts": "2026-07-19T01:15:33.697096+00:00", "yes_price": 0.53}, {"confidence": 0.55, "domain": "crypto", "edge_gross": 0.0203, "fired": false, "gate": "confidence 0.55 < 0.65 bar", "hurdle_base": 0.04176, "p_model": 0.2997, "p_raw": 0.2798, "question": "Will Bitcoin dip to $50,000 by December 31, 2026?", "rationale": "BTC-USD: spot 64,736.26, barrier 50,000 (touch down), 166.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 28.0%, v0.3-calibrated 30.0% (1.08 sigma).", "side": "NO", "ts": "2026-07-19T01:15:31.185688+00:00", "yes_price": 0.325}, {"confidence": 0.65, "domain": "crypto", "edge_gross": 0.0286, "fired": false, "gate": "edge +2.9\u00a2 < 3.7\u00a2 hurdle (2\u00d7 base costs)", "hurdle_base": 0.0366, "p_model": 0.1814, "p_raw": 0.1281, "question": "Will Bitcoin dip to $45,000 by December 31, 2026?", "rationale": "BTC-USD: spot 64,736.26, barrier 45,000 (touch down), 166.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 12.8%, v0.3-calibrated 18.1% (1.52 sigma).", "side": "NO", "ts": "2026-07-19T01:15:31.185051+00:00", "yes_price": 0.215}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.0352, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.04496, "p_model": 0.4448, "p_raw": 0.4952, "question": "Will Bitcoin dip to $55,000 by December 31, 2026?", "rationale": "BTC-USD: spot 64,736.26, barrier 55,000 (touch down), 166.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 49.5%, v0.3-calibrated 44.5% (0.68 sigma).", "side": "NO", "ts": "2026-07-19T01:15:31.184395+00:00", "yes_price": 0.485}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.1047, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.03972, "p_model": 0.6253, "p_raw": 0.7436, "question": "Will Bitcoin reach $70,000 by December 31, 2026?", "rationale": "BTC-USD: spot 64,736.26, barrier 70,000 (touch up), 166.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 74.4%, v0.3-calibrated 62.5% (0.33 sigma).", "side": "NO", "ts": "2026-07-19T01:15:31.183426+00:00", "yes_price": 0.735}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.0064, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.04496, "p_model": 0.4736, "p_raw": 0.538, "question": "Will Bitcoin reach $75,000 by December 31, 2026?", "rationale": "BTC-USD: spot 64,736.26, barrier 75,000 (touch up), 166.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 53.8%, v0.3-calibrated 47.4% (0.62 sigma).", "side": "NO", "ts": "2026-07-19T01:15:31.182547+00:00", "yes_price": 0.485}, {"confidence": 0.55, "domain": "crypto", "edge_gross": 0.0253, "fired": false, "gate": "confidence 0.55 < 0.65 bar", "hurdle_base": 0.04244, "p_model": 0.3653, "p_raw": 0.3757, "question": "Will Bitcoin reach $80,000 by December 31, 2026?", "rationale": "BTC-USD: spot 64,736.26, barrier 80,000 (touch up), 166.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 37.6%, v0.3-calibrated 36.5% (0.89 sigma).", "side": "YES", "ts": "2026-07-19T01:15:31.181420+00:00", "yes_price": 0.335}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.3612, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.06894, "p_model": 0.6362, "p_raw": 0.7566, "question": "Will Bitcoin reach $65,000 on July 18?", "rationale": "BTC-USD: spot 64,736.26, barrier 65,000 (touch up), 0.5d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 75.7%, v0.3-calibrated 63.6% (0.31 sigma).", "side": "YES", "ts": "2026-07-19T01:15:29.191055+00:00", "yes_price": 0.2555}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.08, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.03876, "p_model": 0.67, "p_raw": 0.7313, "question": "Will the price of Bitcoin be above $64,000 on July 20?", "rationale": "BTC-USD: spot 64,736.26, barrier 64,000 (terminal up), 1.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless terminal prob raw 73.1%, v0.3-calibrated 67.0% (0.62 sigma).", "side": "NO", "ts": "2026-07-19T01:15:29.190641+00:00", "yes_price": 0.755}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.0412, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.04968, "p_model": 0.5158, "p_raw": 0.5991, "question": "Will Bitcoin dip to $62,500 in July?", "rationale": "BTC-USD: spot 64,736.26, barrier 62,500 (touch down), 13.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 59.9%, v0.3-calibrated 51.6% (0.53 sigma).", "side": "NO", "ts": "2026-07-19T01:15:29.190182+00:00", "yes_price": 0.5645}, {"confidence": 0.55, "domain": "crypto", "edge_gross": 0.0427, "fired": false, "gate": "confidence 0.55 < 0.65 bar", "hurdle_base": 0.03824, "p_model": 0.2827, "p_raw": 0.2559, "question": "Will Bitcoin dip to $60,000 in July?", "rationale": "BTC-USD: spot 64,736.26, barrier 60,000 (touch down), 13.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 25.6%, v0.3-calibrated 28.3% (1.14 sigma).", "side": "YES", "ts": "2026-07-19T01:15:29.189827+00:00", "yes_price": 0.235}, {"confidence": 0.4, "domain": "crypto", "edge_gross": 0.0205, "fired": false, "gate": "confidence 0.40 < 0.65 bar", "hurdle_base": 0.045, "p_model": 0.4695, "p_raw": 0.5319, "question": "Will Bitcoin reach $67,500 in July?", "rationale": "BTC-USD: spot 64,736.26, barrier 67,500 (touch up), 13.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 53.2%, v0.3-calibrated 46.9% (0.63 sigma).", "side": "NO", "ts": "2026-07-19T01:15:29.189341+00:00", "yes_price": 0.495}, {"confidence": 0.55, "domain": "crypto", "edge_gross": 0.0529, "fired": false, "gate": "confidence 0.55 < 0.65 bar", "hurdle_base": 0.03716, "p_model": 0.2729, "p_raw": 0.2425, "question": "Will Bitcoin reach $70,000 in July?", "rationale": "BTC-USD: spot 64,736.26, barrier 70,000 (touch up), 13.0d horizon, realized daily vol 1.85% (n=95 closes) -> driftless touch prob raw 24.2%, v0.3-calibrated 27.3% (1.17 sigma).", "side": "YES", "ts": "2026-07-19T01:15:29.188657+00:00", "yes_price": 0.215}], "sources": ["data/scored_history.jsonl", "data/ledger.jsonl", "data/resolutions.jsonl", "data/logs/daily_*.log", "data/backfill/results.json", "atlas.yaml", "CHANGELOG.md"], "status": {"days_live": 1, "equity": 5000.0, "fires": 0, "last_run_utc": "2026-07-19T03:22:46.734517+00:00", "live_cycles": 3, "open_picks": 0, "resolved_n": 0, "start_equity": 5000.0, "verdict_gate_n": 100}};
+
+const $ = id => document.getElementById(id);
+const el = (tag, cls, html) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+};
+const esc = s => String(s).replace(/[&<>"]/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const money = v => (v < 0 ? "−$" : "$") + Math.abs(v).toLocaleString("en-US",
+  {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const cents = v => (v * 100).toFixed(1) + "¢";
+const pct = v => (v * 100).toFixed(1) + "%";
+const fmtTs = iso => new Date(iso).toLocaleString(undefined,
+  {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"});
+const fmtD = t => new Date(t).toLocaleDateString(undefined,
+  {month: "short", day: "numeric", year: "numeric"});
+const STATE_CLS = {"LIVE": "live", "SCORES, CAN'T FIRE": "warn",
+                   "ABSTAINS": "abstain", "PENDING": "pending"};
+const STATE_ICO = {"LIVE": "●", "SCORES, CAN'T FIRE": "◒",
+                   "ABSTAINS": "○", "PENDING": "◌"};
+const ENGINES = DATA.engines.map(e => e.name);
+
+// header ---------------------------------------------------------------
+$("updated").textContent = "updated " + fmtTs(DATA.generated_utc);
+const ageH = (Date.now() - new Date(DATA.generated_utc)) / 36e5;
+if (ageH > 30) {
+  const s = $("stale");
+  s.classList.add("on");
+  s.textContent = "⚠ This page is " + Math.round(ageH) + " hours old — the " +
+    "publishing machine has likely been asleep. Numbers are honest as of " +
+    "the timestamp in the header.";
+}
+
+// nav ------------------------------------------------------------------
+(function () {
+  const items = [["overview", "Overview", "overview"]];
+  for (const e of DATA.engines)
+    items.push([e.name, e.name, STATE_CLS[e.state] || "abstain"]);
+  for (const box of [$("sidenav"), $("navchips")]) {
+    for (const [view, label, st] of items) {
+      const a = el("a", null,
+        "<span class='st " + st + "'></span>" + esc(label));
+      a.href = "#/" + view;
+      a.dataset.nav = view;
+      box.append(a);
+    }
+  }
+  const chip = el("span", "modechip", "BACKTEST REPLAY");
+  $("sidenav").append(chip);
+})();
+
+// shared bits ----------------------------------------------------------
+function donut(frac, size, color2) {
+  const r = (size - 10) / 2, c = 2 * Math.PI * r, f = c * frac;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none"
+      stroke="${color2 || "var(--baseline)"}" stroke-width="8"/>
+    <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none"
+      stroke="var(--blue)" stroke-width="8" stroke-linecap="round"
+      stroke-dasharray="${f} ${c - f}" stroke-dashoffset="${c / 4}"/>
+  </svg>`;
+}
+
+function makePick(r) {
+  const d = el("div", "pick");
+  d.append(el("div", "q", esc(r.question)));
+  const m = el("div", "meta");
+  m.innerHTML =
+    "<span class='dom-tag'>" + esc(r.domain) + "</span>" +
+    "<span>market " + cents(r.yes_price) + "</span>" +
+    "<span>model <b>" + pct(r.p_model) + "</b></span>" +
+    "<span>" + esc(r.side) + " edge " +
+      (r.edge_gross >= 0 ? "+" : "") + (r.edge_gross * 100).toFixed(1) +
+      "¢ (needs " + (r.hurdle_base * 100).toFixed(1) + "¢)</span>" +
+    "<span>conf " + r.confidence.toFixed(2) + "</span>" +
+    "<span>" + fmtTs(r.ts) + "</span>";
+  d.append(m);
+  const g = el("div", "gate " + (r.fired ? "fired" : "blocked"));
+  g.innerHTML = r.fired ? "▶ FIRED" : "⊘ held back — " + esc(r.gate);
+  d.append(g);
+  const det = el("details", "rat");
+  det.innerHTML = "<summary>rationale</summary><p>" +
+    esc(r.rationale) + "</p>";
+  d.append(det);
+  return d;
+}
+
+// record dashboard (tiles / balance / months / calendar / journal) ------
+function renderTiles(rec) {
+  const st = rec.stats, tiles = $("bt-tiles");
+  tiles.replaceChildren();
+  let t = el("div", "tile");
+  t.append(el("div", "k", "EV per trade"));
+  t.append(el("div", "v " + ((st.ev_per_trade || 0) >= 0 ? "pos" : "neg"),
+    st.ev_per_trade === null ? "—" : esc(money(st.ev_per_trade))));
+  t.append(el("div", "n", "total " + esc(money(st.total_pnl)) + " · n=" +
+    st.trades));
+  tiles.append(t);
+
+  t = el("div", "tile");
+  t.append(el("div", "k", "Win rate"));
+  const g = el("div", "gauge");
+  g.innerHTML = donut(st.win_rate || 0, 64, "rgba(230,103,103,0.45)") +
+    `<div><div class="big">${st.win_rate === null ? "—" : pct(st.win_rate)}</div>
+     <div class="lg"><span><span class="dot" style="background:var(--blue)"></span>${st.wins} won</span>
+     <span><span class="dot" style="background:var(--loss)"></span>${st.losses} lost</span></div>` +
+    (st.win_rate_ci ? `<div class="n" style="color:var(--muted);font-size:.72rem">95% CI ${pct(st.win_rate_ci[0])}–${pct(st.win_rate_ci[1])}</div>` : "") +
+    `</div>`;
+  t.append(g);
+  tiles.append(t);
+
+  t = el("div", "tile");
+  t.append(el("div", "k", "Avg win / avg loss"));
+  t.append(el("div", "v", st.rr === null ? "—" : st.rr.toFixed(2)));
+  const aw = st.avg_win, al = Math.abs(st.avg_loss);
+  const wfrac = aw + al > 0 ? aw / (aw + al) : 0.5;
+  const sb = el("div", "splitbar");
+  sb.innerHTML = `<i style="width:${wfrac*100}%;background:var(--blue)"></i>` +
+    `<i style="width:${(1-wfrac)*100}%;background:var(--loss)"></i>`;
+  t.append(sb);
+  t.append(el("div", "lg",
+    `<span><span class="dot" style="background:var(--blue)"></span>win ${esc(money(aw))}</span>` +
+    `<span><span class="dot" style="background:var(--loss)"></span>loss ${esc(money(st.avg_loss))}</span>`));
+  tiles.append(t);
+
+  t = el("div", "tile");
+  t.append(el("div", "k", "Win streaks"));
+  const sr = el("div", "streakrow");
+  sr.innerHTML =
+    `<div class="s"><div class="num">${st.streak_days}</div>
+       <div class="lab">days</div>
+       <div class="pillpair"><span class="pill w">${st.win_days}</span>
+       <span class="pill l">${st.loss_days}</span></div></div>
+     <div class="s"><div class="num">${st.streak_trades}</div>
+       <div class="lab">trades</div>
+       <div class="pillpair"><span class="pill w">${st.wins}</span>
+       <span class="pill l">${st.losses}</span></div></div>`;
+  t.append(sr);
+  t.append(el("div", "n", "day win rate " +
+    (st.day_win_rate === null ? "—" : pct(st.day_win_rate))));
+  tiles.append(t);
+}
+
+function renderBalance(rec) {
+  const all = rec.balance.map(p => ({t: new Date(p.ts).getTime(),
+                                     v: p.equity}));
+  const last = all[all.length - 1];
+  const d0 = last.v - rec.start_equity;
+  const bd = $("bal-delta");
+  bd.textContent = money(last.v) + " (" + (d0 >= 0 ? "+" : "−") +
+    money(Math.abs(d0)) + ")";
+  bd.className = "delta " + (d0 >= 0 ? "pos" : "neg");
+
+  const RANGES = [["1M", 1], ["3M", 3], ["6M", 6], ["All", null]];
+  let current = null;
+  const tabs = $("bal-tabs");
+  tabs.replaceChildren();
+  for (const [lab, months] of RANGES) {
+    const b = el("button", months === null ? "on" : "", lab);
+    b.onclick = () => {
+      current = months;
+      tabs.querySelectorAll("button").forEach(x => x.classList.remove("on"));
+      b.classList.add("on");
+      draw();
+    };
+    tabs.append(b);
+  }
+
+  const tt = $("tt");
+  function draw() {
+    let pts = all;
+    if (current !== null) {
+      const cut = last.t - current * 30.44 * 864e5;
+      pts = all.filter(p => p.t >= cut);
+      const before = all.filter(p => p.t < cut);
+      if (before.length)
+        pts = [{t: cut, v: before[before.length - 1].v}, ...pts];
+    }
+    if (pts.length < 2) pts = all.slice(-2);
+    const W = 640, H = 230, P = {t: 12, r: 12, b: 24, l: 54};
+    let y0 = Math.min(...pts.map(p => p.v));
+    let y1 = Math.max(...pts.map(p => p.v));
+    const pad = Math.max((y1 - y0) * 0.12, rec.start_equity * 0.004);
+    y0 -= pad; y1 += pad;
+    const x0 = pts[0].t, x1 = pts[pts.length - 1].t;
+    const X = t => P.l + (t - x0) / (x1 - x0 || 1) * (W - P.l - P.r);
+    const Y = v => P.t + (1 - (v - y0) / (y1 - y0)) * (H - P.t - P.b);
+    let g = "";
+    for (let i = 0; i <= 3; i++) {
+      const v = y0 + (y1 - y0) * i / 3, y = Y(v);
+      g += `<line x1="${P.l}" x2="${W - P.r}" y1="${y}" y2="${y}"
+            stroke="var(--grid)" stroke-width="1"/>
+            <text x="${P.l - 8}" y="${y + 4}" text-anchor="end" font-size="11"
+            fill="var(--muted)">$${Math.round(v).toLocaleString()}</text>`;
+    }
+    const tickN = 4;
+    for (let i = 0; i < tickN; i++) {
+      const t = x0 + (x1 - x0) * i / (tickN - 1);
+      const anchor = i === 0 ? "start" : (i === tickN - 1 ? "end" : "middle");
+      g += `<text x="${X(t)}" y="${H - 6}" text-anchor="${anchor}"
+            font-size="11" fill="var(--muted)">${new Date(t)
+            .toLocaleDateString(undefined, {month: "short", year: "2-digit",
+                                            timeZone: "UTC"})}</text>`;
+    }
+    const line = pts.map((p, i) =>
+      (i ? "L" : "M") + X(p.t).toFixed(1) + " " + Y(p.v).toFixed(1)).join(" ");
+    g += `<defs><linearGradient id="bfill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="var(--blue)" stop-opacity="0.28"/>
+          <stop offset="1" stop-color="var(--blue)" stop-opacity="0"/>
+          </linearGradient></defs>`;
+    g += `<path d="${line} L ${X(x1).toFixed(1)} ${Y(y0).toFixed(1)}
+          L ${X(x0).toFixed(1)} ${Y(y0).toFixed(1)} Z" fill="url(#bfill)"/>`;
+    g += `<path d="${line}" fill="none" stroke="var(--blue)" stroke-width="2"
+          stroke-linejoin="round"/>`;
+    const lp = pts[pts.length - 1];
+    g += `<circle cx="${X(lp.t)}" cy="${Y(lp.v)}" r="4.5" fill="var(--blue)"
+          stroke="var(--surface)" stroke-width="2"/>`;
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "Backtest balance curve");
+    svg.innerHTML = g;
+    $("bal-chart").replaceChildren(svg);
+    svg.addEventListener("pointermove", ev => {
+      const rect = svg.getBoundingClientRect();
+      const mx = (ev.clientX - rect.left) / rect.width * W;
+      let best = 0, bd2 = 1e18;
+      pts.forEach((p, i) => {
+        const d = Math.abs(X(p.t) - mx);
+        if (d < bd2) { bd2 = d; best = i; }
+      });
+      const p = pts[best];
+      tt.style.display = "block";
+      tt.innerHTML = "<b>" + money(p.v) + "</b> · " + fmtD(p.t);
+      tt.style.left = Math.min(ev.clientX + 12, innerWidth - 180) + "px";
+      tt.style.top = (ev.clientY + 14) + "px";
+    });
+    svg.addEventListener("pointerleave", () => tt.style.display = "none");
+  }
+  draw();
+
+  $("bal-table").innerHTML =
+    "<tr><th>resolved</th><th>equity</th></tr>" +
+    all.map(p => "<tr><td>" + fmtD(p.t) + "</td><td>" +
+      money(p.v) + "</td></tr>").join("");
+}
+
+function renderMonths(rec) {
+  const byM = {};
+  for (const [d, v] of Object.entries(rec.daily))
+    byM[d.slice(0, 7)] = (byM[d.slice(0, 7)] || 0) + v.trades;
+  let keys = Object.keys(byM).sort();
+  $("tc-total").textContent = rec.stats.trades + " trades";
+  const box = $("tc-chart");
+  box.replaceChildren();
+  if (!keys.length) return;
+  const months = [];
+  for (let ym = keys[0]; ym <= keys[keys.length - 1];) {
+    months.push(ym);
+    byM[ym] = byM[ym] || 0;
+    const [y, m] = ym.split("-").map(Number);
+    ym = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 7);
+  }
+  const W = 300, H = 120, P = {t: 16, r: 4, b: 20, l: 4};
+  const max = Math.max(...months.map(m => byM[m]));
+  const bw = (W - P.l - P.r) / months.length;
+  let g = "";
+  months.forEach((m, i) => {
+    const h = (H - P.t - P.b) * byM[m] / max;
+    const x = P.l + i * bw;
+    g += `<rect x="${(x + bw * 0.15).toFixed(1)}" y="${(H - P.b - h).toFixed(1)}"
+          width="${(bw * 0.7).toFixed(1)}" height="${h.toFixed(1)}" rx="3"
+          fill="var(--blue)"><title>${m}: ${byM[m]} trades</title></rect>`;
+    g += `<text x="${(x + bw / 2).toFixed(1)}" y="${H - P.b + 6}" font-size="9"
+          fill="var(--muted)" text-anchor="middle" dominant-baseline="hanging"
+          >${m.slice(2).replace("-", "/")}</text>`;
+    g += `<text x="${(x + bw / 2).toFixed(1)}" y="${(H - P.b - h - 4).toFixed(1)}"
+          font-size="10" fill="var(--ink-2)" text-anchor="middle">${byM[m]}</text>`;
+  });
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Resolved trades per month");
+  svg.innerHTML = g;
+  box.append(svg);
+}
+
+function renderCalendar(rec) {
+  const daily = rec.daily;
+  const days = Object.keys(daily).sort();
+  const card = $("cal-card");
+  if (!days.length) { card.hidden = true; return; }
+  card.hidden = false;
+  const first = days[0].slice(0, 7), lastM = days[days.length - 1].slice(0, 7);
+  let cur = lastM;
+  const mAdd = (ym, k) => {
+    const [y, m] = ym.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1 + k, 1)).toISOString().slice(0, 7);
+  };
+  const render = () => {
+    const [y, m] = cur.split("-").map(Number);
+    $("cal-month").textContent = new Date(Date.UTC(y, m - 1, 1))
+      .toLocaleDateString(undefined, {month: "long", year: "numeric",
+                                      timeZone: "UTC"});
+    $("cal-prev").disabled = cur <= first;
+    $("cal-next").disabled = cur >= lastM;
+    const dim = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const startDow = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
+    let html = "<tr>" + ["Sun","Mon","Tue","Wed","Thu","Fri","Sat","Total"]
+      .map(d => "<th>" + d + "</th>").join("") + "</tr>";
+    let cells = [], mTrades = 0, mWins = 0, mPnl = 0;
+    for (let i = 0; i < startDow; i++) cells.push(null);
+    for (let d = 1; d <= dim; d++) cells.push(d);
+    while (cells.length % 7) cells.push(null);
+    for (let w = 0; w < cells.length / 7; w++) {
+      let wk = "", wPnl = 0, wAny = false;
+      for (let i = 0; i < 7; i++) {
+        const d = cells[w * 7 + i];
+        if (d === null) { wk += '<td class="blank"></td>'; continue; }
+        const key = cur + "-" + String(d).padStart(2, "0");
+        const v = daily[key];
+        if (!v) { wk += '<td><span class="d">' + d + "</span></td>"; continue; }
+        wAny = true; wPnl += v.pnl;
+        mTrades += v.trades; mWins += v.wins; mPnl += v.pnl;
+        const cls = v.pnl > 0 ? "win" : (v.pnl < 0 ? "loss" : "");
+        wk += `<td class="${cls}"><span class="d">${d}</span>
+          <div class="p">${esc(money(v.pnl))}</div>
+          <div class="c">${v.trades} pick${v.trades > 1 ? "s" : ""}</div></td>`;
+      }
+      wk += wAny
+        ? `<td class="tot"><span class="d">wk</span>
+           <div class="p" style="color:${wPnl >= 0 ? "var(--good)" : "var(--loss)"}">
+           ${esc(money(wPnl))}</div></td>`
+        : '<td class="tot"></td>';
+      html += "<tr>" + wk + "</tr>";
+    }
+    $("cal").innerHTML = html;
+    $("cal-sum").replaceChildren(
+      el("span", "pill w", mTrades + " picks"),
+      el("span", "pill w", mWins + " won"),
+      el("span", "pill " + (mPnl >= 0 ? "w" : "l"), esc(money(mPnl))));
+  };
+  $("cal-prev").onclick = () => { if (cur > first) { cur = mAdd(cur, -1); render(); } };
+  $("cal-next").onclick = () => { if (cur < lastM) { cur = mAdd(cur, 1); render(); } };
+  render();
+}
+
+function renderJournal(rec, view) {
+  $("journal-title").textContent = "Journal — resolved backtest picks" +
+    (view === "overview" ? "" : " (" + view + ")");
+  const box = $("journal-list");
+  box.replaceChildren();
+  if (!rec.journal.length) {
+    box.append(el("div", "empty", "No resolved backtest picks."));
+    return;
+  }
+  for (const t of rec.journal) {
+    const d = el("div", "pick");
+    const head = el("div", "q");
+    head.innerHTML = esc(t.question) + " &nbsp;<span class='pnl " +
+      (t.pnl >= 0 ? "pos" : "neg") + "'>" + esc(money(t.pnl)) + "</span>";
+    d.append(head);
+    const m = el("div", "meta");
+    m.innerHTML =
+      "<span class='dom-tag'>" + esc(t.coin) + "</span>" +
+      "<span><b>" + esc(t.side) + "</b> @ " + cents(t.exec_price) + "</span>" +
+      "<span>model " + pct(t.p_model) + " vs mkt " + cents(t.p_market) + "</span>" +
+      "<span>stake " + esc(money(t.stake)) + "</span>" +
+      "<span>" + esc(t.bet) + " → " + esc(t.resolved) + "</span>" +
+      "<span>eq " + esc(money(t.equity_after)) + "</span>";
+    d.append(m);
+    box.append(d);
+  }
+}
+
+function renderScored(view) {
+  const rows = view === "overview" ? DATA.scored_table.slice(0, 40)
+    : DATA.scored_table.filter(r => r.domain === view);
+  $("scored-title").textContent = "Recently scored markets (live" +
+    (view === "overview" ? ")" : " · " + view + ")");
+  const box = $("scored");
+  box.replaceChildren();
+  if (!rows.length) {
+    box.append(el("div", "empty",
+      "Nothing scored yet in the live record for this engine."));
+    return;
+  }
+  for (const r of rows) box.append(makePick(r));
+}
+
+function renderEngineInfo(view) {
+  const e = DATA.engines.find(x => x.name === view);
+  const box = $("einfo");
+  box.replaceChildren();
+  if (!e) return;
+  const head = el("div", "epanel-head");
+  head.append(el("span", "engine-name",
+    "<b style='font-size:1.05rem'>" + esc(e.name) + "</b>"));
+  head.append(el("span", "chip " + (STATE_CLS[e.state] || "abstain"),
+    (STATE_ICO[e.state] || "") + " " + esc(e.state)));
+  box.append(head);
+  const note = el("div", "note", esc(e.note));
+  note.style.marginTop = "8px";
+  note.style.color = "var(--ink-2)";
+  note.style.fontSize = ".86rem";
+  box.append(note);
+  const stats = el("div", "estat-row");
+  stats.append(el("span", "estat", "latest scan <b>" + e.routed_latest +
+    "</b> routed · <b>" + e.scored_latest + "</b> scored"));
+  stats.append(el("span", "estat", "all-time <b>" + e.scored_total +
+    "</b> scores on <b>" + e.markets_total + "</b> markets"));
+  if (e.last_scored)
+    stats.append(el("span", "estat", "last scored <b>" +
+      fmtTs(e.last_scored) + "</b>"));
+  box.append(stats);
+  if (e.scored_total) {
+    const g = e.gates;
+    const gr = el("div", "estat-row");
+    gr.append(el("span", "estat", "▶ fired <b>" + g.fired + "</b>"));
+    gr.append(el("span", "estat", "⊘ confidence bar <b>" +
+      g.confidence + "</b>"));
+    gr.append(el("span", "estat", "⊘ 2× cost hurdle <b>" + g.hurdle + "</b>"));
+    if (g.caps)
+      gr.append(el("span", "estat", "⊘ caps <b>" + g.caps + "</b>"));
+    box.append(gr);
+  }
+}
+
+// router ---------------------------------------------------------------
+function show(view) {
+  const rec = view === "overview" ? DATA.records.all : DATA.records[view];
+  document.querySelectorAll("main [data-view]").forEach(s => {
+    const spec = s.dataset.view.split(",");
+    const on = spec.includes("all") || spec.includes(view) ||
+      (spec.includes("engines") && view !== "overview");
+    s.hidden = !on;
+  });
+  document.querySelectorAll("[data-nav]").forEach(a =>
+    a.classList.toggle("on", a.dataset.nav === view));
+
+  $("view-title").innerHTML = view === "overview"
+    ? "Backtest replay — <span>all engines</span>"
+    : esc(view) + " — <span>backtest replay</span>";
+  $("bt-label").textContent = rec.label +
+    (rec.stats.trades
+      ? " — " + rec.scored_n.toLocaleString() + " markets scored, " +
+        rec.stats.trades + " cleared the live gates."
+      : "");
+
+  const emptyCard = $("bt-empty"), body = $("bt-body");
+  if (!rec.stats.trades) {
+    emptyCard.hidden = false;
+    body.hidden = true;
+    emptyCard.textContent = rec.empty_reason ||
+      "No backtest trades under the live rule set.";
+    emptyCard.className = "card empty";
+  } else {
+    emptyCard.hidden = true;
+    body.hidden = false;
+    renderTiles(rec);
+    renderBalance(rec);
+    renderMonths(rec);
+    renderCalendar(rec);
+    $("bt-assump").textContent = rec.assumptions || "";
+  }
+  renderJournal(rec, view);
+  renderScored(view);
+  if (view !== "overview") renderEngineInfo(view);
+  window.scrollTo({top: 0});
+}
+
+function route() {
+  const h = location.hash.replace(/^#\/?/, "");
+  show(ENGINES.includes(h) ? h : "overview");
+}
+window.addEventListener("hashchange", route);
+
+// static sections (rendered once) --------------------------------------
+(function () {
+  const st = DATA.status;
+  const tiles = [
+    [money(st.equity), "paper equity", "start " + money(st.start_equity)],
+    [String(st.fires), "fires to date", st.open_picks + " open"],
+    [st.resolved_n + " / " + st.verdict_gate_n, "resolved picks",
+     "verdict gate n≥" + st.verdict_gate_n],
+    [String(st.days_live), "days live", st.live_cycles + " daily cycles"],
+    [st.last_run_utc ? fmtTs(st.last_run_utc) : "—", "last run", ""],
+  ];
+  for (const [v, k, n] of tiles) {
+    const t = el("div", "tile");
+    t.append(el("div", "v", esc(v)), el("div", "k", esc(k)));
+    if (n) t.append(el("div", "n", esc(n)));
+    $("strip").append(t);
+  }
+})();
+
+(function () {
+  const f = DATA.funnel;
+  if (!f) { $("funnel").append(el("div", "empty", "No runs yet.")); return; }
+  $("funnel-note").textContent = "Daily scan of " + fmtTs(f.run_ts) +
+    ". Each stage is a rule; the counts show where markets were rejected.";
+  const max = Math.max(...f.stages.map(s => s.count), 1);
+  f.stages.forEach(s => {
+    const d = el("div", "stage");
+    const r1 = el("div", "row1");
+    r1.append(el("div", "lbl", esc(s.label)),
+              el("div", "cnt", s.count.toLocaleString()));
+    d.append(r1);
+    const bar = el("div", "bar");
+    bar.style.width = Math.max(100 * s.count / max, s.count ? 1 : 0.4) + "%";
+    d.append(bar);
+    if (s.died !== null && s.died > 0)
+      d.append(el("div", "died", "−" + s.died.toLocaleString() +
+        " rejected: <b>" + esc(s.why) + "</b>"));
+    $("funnel").append(d);
+  });
+  if (f.domains.length) {
+    const box = $("domains");
+    box.append(el("h2", null, "routed by domain (median cost hurdle)"));
+    for (const d of f.domains) {
+      const r = el("div", "domrow");
+      r.append(el("span", "d", esc(d.domain)),
+        el("span", null, d.routed + " markets"),
+        el("span", null, "hurdle " + d.median_hurdle_c.toFixed(1) + "¢"));
+      box.append(r);
+    }
+  }
+})();
+
+(function () {
+  const h = DATA.holdout, box = $("holdout");
+  const prog = el("div");
+  prog.append(el("div", null,
+    "<b>" + h.resolved_n + "</b> of <b>" + h.target_n +
+    "</b> resolved holdout markets — verdict only at n≥" + h.target_n));
+  const meter = el("div", "meter");
+  const fill = el("div", "fill");
+  fill.style.width = Math.max(100 * h.resolved_n / h.target_n, 0.5) + "%";
+  meter.append(fill);
+  prog.append(meter);
+  box.append(prog);
+  const rows = [
+    ["registered (frozen before validation)", h.registered],
+    ["live markets scored by v0.3 so far", String(h.live_scored_distinct)],
+    ["estimated verdict", h.est_verdict],
+  ];
+  if (h.interim) {
+    rows.push(["interim Brier — v0.3", h.interim.brier_v03.toFixed(4)],
+      ["interim Brier — market price", h.interim.brier_market.toFixed(4)]);
+    if (h.interim.brier_v02_raw !== null)
+      rows.push(["interim Brier — v0.2 raw (same rows)",
+                 h.interim.brier_v02_raw.toFixed(4)]);
+  } else {
+    rows.push(["interim Brier", "none yet — nothing resolved"]);
+  }
+  for (const [k, v] of rows) {
+    const r = el("div", "kv");
+    r.append(el("span", "k", esc(k)), el("span", "v", esc(v)));
+    box.append(r);
+  }
+  if (h.insample_evidence) {
+    const e = h.insample_evidence;
+    box.append(el("div", "finePrint",
+      "Context (in-sample evidence, NOT the holdout): on " + e.n +
+      " historical rows the previous model's raw Brier was " +
+      e.brier_v02_raw.toFixed(4) + " vs the market's " +
+      e.brier_market.toFixed(4) + " (lower is better). v0.3 must now beat " +
+      "both the market and that raw model on markets it has never seen. " +
+      "PASS/FAIL was pre-registered; a FAIL is final for v0.3."));
+  }
+})();
+
+(function () {
+  for (const e of DATA.engines) {
+    const d = el("div", "engine");
+    const top = el("div", "top");
+    top.append(el("span", "name", esc(e.name)));
+    top.append(el("span", "chip " + (STATE_CLS[e.state] || "abstain"),
+      (STATE_ICO[e.state] || "") + " " + esc(e.state)));
+    const go = el("a", "go", "open dashboard →");
+    go.href = "#/" + e.name;
+    top.append(go);
+    d.append(top);
+    d.append(el("div", "note", esc(e.note)));
+    d.append(el("div", "live-n", "latest scan: " + e.routed_latest +
+      " routed, " + e.scored_latest + " scored"));
+    $("engines").append(d);
+  }
+})();
+
+(function () {
+  for (const c of DATA.changelog) {
+    const d = el("div", "cl-entry");
+    d.append(el("div", "t", esc(c.title)));
+    const ul = el("ul");
+    for (const b of c.bullets) ul.append(el("li", null, esc(b)));
+    d.append(ul);
+    $("changelog").append(d);
+  }
+})();
+
+$("srcs").innerHTML = DATA.sources.map(s => "<code>" + esc(s) + "</code>")
+  .join(" · ");
+$("gen").textContent = "Generated " + new Date(DATA.generated_utc)
+  .toISOString().replace("T", " ").slice(0, 17) + " UTC · " + DATA.brand;
+
+route();
+</script>
+</body>
+</html>
